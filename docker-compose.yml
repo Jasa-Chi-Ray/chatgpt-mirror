@@ -1,6 +1,6 @@
 services:
   chatgpt-mirror:
-    image: lisa661520/chatgpt-mirror-django:frontend
+    image: lisa666520/chatgpt-mirror-django:frontend
     ports:
       - "${PORT:-40002}:${PORT:-40002}"
     volumes:
@@ -35,7 +35,7 @@ services:
       - chatgpt-network
 
   django:
-    image: lisa661520/chatgpt-mirror-django:backend
+    image: lisa666520/chatgpt-mirror-django:backend
     ports:
       - "127.0.0.1:18000:8000"
     environment:
@@ -63,7 +63,7 @@ services:
       - chatgpt-network
 
   cfbypass:
-    image: lisa661520/chatgpt-mirror-django:cfbypass
+    image: lisa666520/chatgpt-mirror-django:cfbypass
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "127.0.0.1:18001:8000"
