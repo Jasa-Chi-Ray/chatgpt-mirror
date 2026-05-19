@@ -80,6 +80,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Scripts',
         component: () => import('@/pages/account/scripts.vue'),
         meta: { title: '脚本', requiresAdmin: true }
+      },
+      {
+        path: 'access',
+        name: 'AccessControl',
+        component: () => import('@/pages/account/access.vue'),
+        meta: { title: '访问限制', requiresAdmin: true }
       }
     ]
   }

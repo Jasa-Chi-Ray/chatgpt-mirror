@@ -4,7 +4,7 @@ from django.urls import path
 from app.accounts.views import UserAccountView, UserRelateGPTCarView, VisitLogView, BatchModelLimit, \
     UserChatGPTAccountList, GetMirrorToken, MirrorProxyConfigView, MirrorProxyTestView, CustomScriptConfigView
 from app.accounts.views.login import AccountLogin, UserFreeLoginView, AccountRegister
-from app.accounts.views.cfg import VersionConfig
+from app.accounts.views.cfg import VersionConfig, AccessControlView
 
 urlpatterns = [
     path("", UserAccountView.as_view()),
@@ -20,4 +20,5 @@ urlpatterns = [
     path("relat-gptcar", UserRelateGPTCarView.as_view()),
     path("login", AccountLogin.as_view()),
     path("visit-log", VisitLogView.as_view()),
+    path("access-control", AccessControlView.as_view()),
 ]

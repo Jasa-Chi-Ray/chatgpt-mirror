@@ -31,6 +31,10 @@
             <template #icon><t-icon name="code" /></template>
             脚本
           </t-menu-item>
+          <t-menu-item value="/account/access">
+            <template #icon><t-icon name="secured" /></template>
+            访问限制
+          </t-menu-item>
         </t-menu>
       </t-aside>
       <t-layout>
