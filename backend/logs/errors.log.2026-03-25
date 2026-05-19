@@ -1,0 +1,89 @@
+[2026-03-25 10:29:26] WARNING [log|248] - Method Not Allowed: /0x/user/
+[2026-03-25 10:29:26] WARNING [basehttp|213] - "PUT /0x/user/ HTTP/1.1" 405 45
+[2026-03-25 10:29:27] WARNING [log|248] - Method Not Allowed: /0x/user/
+[2026-03-25 10:29:27] WARNING [basehttp|213] - "PUT /0x/user/ HTTP/1.1" 405 45
+[2026-03-25 10:29:27] WARNING [log|248] - Method Not Allowed: /0x/user/
+[2026-03-25 10:29:27] WARNING [basehttp|213] - "PUT /0x/user/ HTTP/1.1" 405 45
+[2026-03-25 10:29:28] WARNING [log|248] - Method Not Allowed: /0x/user/
+[2026-03-25 10:29:28] WARNING [basehttp|213] - "PUT /0x/user/ HTTP/1.1" 405 45
+[2026-03-25 10:29:28] WARNING [log|248] - Method Not Allowed: /0x/user/
+[2026-03-25 10:29:28] WARNING [basehttp|213] - "PUT /0x/user/ HTTP/1.1" 405 45
+[2026-03-25 10:29:28] WARNING [log|248] - Method Not Allowed: /0x/user/
+[2026-03-25 10:29:28] WARNING [basehttp|213] - "PUT /0x/user/ HTTP/1.1" 405 45
+[2026-03-25 10:29:51] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:29:51] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:34:10] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:34:10] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:34:20] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:34:20] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:34:21] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:34:21] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:34:30] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:34:30] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:40:57] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:40:57] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:40:57] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:40:57] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:40:57] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:40:57] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:40:58] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:40:58] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:40:58] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:40:58] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:40:58] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:40:58] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:41:04] WARNING [log|248] - Bad Request: /0x/user/login
+[2026-03-25 10:41:04] WARNING [basehttp|213] - "POST /0x/user/login HTTP/1.1" 400 67
+[2026-03-25 10:41:11] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:41:11] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:43:26] WARNING [log|248] - Bad Request: /0x/user/
+[2026-03-25 10:43:26] WARNING [basehttp|213] - "POST /0x/user/ HTTP/1.1" 400 85
+[2026-03-25 10:45:13] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 10:45:13] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 39
+[2026-03-25 10:45:20] WARNING [log|248] - Method Not Allowed: /0x/chatgpt/car
+[2026-03-25 10:45:20] WARNING [basehttp|213] - "PUT /0x/chatgpt/car HTTP/1.1" 405 45
+[2026-03-25 10:45:21] WARNING [log|248] - Method Not Allowed: /0x/chatgpt/car
+[2026-03-25 10:45:21] WARNING [basehttp|213] - "PUT /0x/chatgpt/car HTTP/1.1" 405 45
+[2026-03-25 10:45:21] WARNING [log|248] - Method Not Allowed: /0x/chatgpt/car
+[2026-03-25 10:45:21] WARNING [basehttp|213] - "PUT /0x/chatgpt/car HTTP/1.1" 405 45
+[2026-03-25 10:45:27] WARNING [log|248] - Method Not Allowed: /0x/chatgpt/car
+[2026-03-25 10:45:27] WARNING [basehttp|213] - "PUT /0x/chatgpt/car HTTP/1.1" 405 45
+[2026-03-25 10:56:46] WARNING [log|248] - Bad Request: /0x/chatgpt/login
+[2026-03-25 10:59:04] WARNING [log|248] - Forbidden: /0x/user/visit-log
+[2026-03-25 10:59:04] WARNING [basehttp|213] - "GET /0x/user/visit-log?page=1&page_size=20 HTTP/1.1" 403 49
+[2026-03-25 10:59:05] WARNING [log|248] - Forbidden: /0x/user/visit-log
+[2026-03-25 10:59:05] WARNING [basehttp|213] - "GET /0x/user/visit-log?page=1&page_size=20 HTTP/1.1" 403 49
+[2026-03-25 12:06:37] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:06:37] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 39
+[2026-03-25 12:06:41] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:06:41] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 39
+[2026-03-25 12:29:24] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:29:24] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 39
+[2026-03-25 12:29:27] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:29:27] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 39
+[2026-03-25 12:33:03] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:33:03] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 39
+[2026-03-25 12:40:45] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:40:45] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 42
+[2026-03-25 12:44:22] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:44:22] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 101
+[2026-03-25 12:47:36] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 12:47:36] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 107
+[2026-03-25 13:06:58] WARNING [log|248] - Unauthorized: /0x/user/chatgpt-list
+[2026-03-25 13:06:58] WARNING [basehttp|213] - "GET /0x/user/chatgpt-list HTTP/1.1" 401 43
+[2026-03-25 13:07:48] WARNING [log|248] - Unauthorized: /0x/user/chatgpt-list
+[2026-03-25 13:07:48] WARNING [basehttp|213] - "GET /0x/user/chatgpt-list HTTP/1.1" 401 43
+[2026-03-25 13:22:29] WARNING [log|248] - Bad Request: /0x/user/login-free
+[2026-03-25 13:22:29] WARNING [basehttp|213] - "POST /0x/user/login-free HTTP/1.1" 400 47
+[2026-03-25 13:22:34] WARNING [log|248] - Bad Request: /0x/user/register
+[2026-03-25 13:22:34] WARNING [basehttp|213] - "POST /0x/user/register HTTP/1.1" 400 46
+[2026-03-25 13:22:41] WARNING [log|248] - Bad Request: /0x/user/register
+[2026-03-25 13:22:41] WARNING [basehttp|213] - "POST /0x/user/register HTTP/1.1" 400 46
+[2026-03-25 13:27:41] WARNING [log|248] - Bad Request: /0x/user/login-free
+[2026-03-25 13:27:41] WARNING [basehttp|213] - "POST /0x/user/login-free HTTP/1.1" 400 47
+[2026-03-25 13:27:41] WARNING [log|248] - Bad Request: /0x/user/login-free
+[2026-03-25 13:27:41] WARNING [basehttp|213] - "POST /0x/user/login-free HTTP/1.1" 400 47
+[2026-03-25 13:27:42] WARNING [log|248] - Bad Request: /0x/user/login-free
+[2026-03-25 13:27:42] WARNING [basehttp|213] - "POST /0x/user/login-free HTTP/1.1" 400 47
+[2026-03-25 19:49:21] WARNING [log|248] - Bad Request: /0x/chatgpt/
+[2026-03-25 19:49:21] WARNING [basehttp|213] - "POST /0x/chatgpt/ HTTP/1.1" 400 53

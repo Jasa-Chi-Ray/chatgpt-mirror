@@ -1,0 +1,4 @@
+DrissionPage==4.0.5.6
+fastapi==0.111.0
+pyvirtualdisplay==3.0
+uvicorn==0.30.1
