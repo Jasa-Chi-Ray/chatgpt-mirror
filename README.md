@@ -3,7 +3,7 @@
 
 ChatGPT Mirror 是一个由 Vue 管理后台、Django 后台服务、Cloudflare Bypass 辅助服务和 Docker 编排组成的镜像站管理项目。
 
-> 维护完成。正在添加新功能中，请不要部署
+> 维护完成。
 >
 > 说明：`Gateway/` 目录在本文档中声明为空目录/预留目录，不包含在本 README 的目录结构、功能说明和使用说明中。
 
