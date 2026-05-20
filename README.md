@@ -6,6 +6,10 @@ ChatGPT Mirror 是一个由 Vue 管理后台、Django 后台服务、Cloudflare 
 > 维护完成。
 >
 > 说明：`Gateway/` 目录在本文档中声明为空目录/预留目录，不包含在本 README 的目录结构、功能说明和使用说明中。
+### 一键部署 
+```
+bash <(curl -fsSL https://raw.githubusercontent.com/Jasa-Chi-Ray/chatgpt-mirror/refs/heads/main/setup.sh)
+```
 
 ## 功能概览
 
