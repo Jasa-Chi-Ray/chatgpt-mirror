@@ -133,7 +133,6 @@ setup_env() {
 
     # 输出 .env
     cat > .env <<EOF
-# ===== ChatGPT Mirror 环境变量 =====
 
 ADMIN_USERNAME=${ADMIN_USERNAME}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
