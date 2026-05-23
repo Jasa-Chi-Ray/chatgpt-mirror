@@ -294,6 +294,7 @@ app.cron.update_access_token
 - Docker 部署流程
 - Cloudflare Bypass 辅助能力
 - 日志与定时任务可靠性
+- 已经尽力优化速度，优化降智问题
 
 ## 许可证
 
