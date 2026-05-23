@@ -28,21 +28,8 @@
 |------|------|
 | `gateway/src/proxy.rs` — `is_passthrough_cookie_name` | 改为黑名单模式，排除 Gateway 自有 cookie，其余全部透传给 ChatGPT |
 | `gateway/src/proxy.rs` — `cookie_value_with_suffix` | 新增函数，支持读取 `.0` / `.1` 分片 cookie 并拼接完整值 |
-| `gateway/src/proxy.rs` — `resolve_proxy_auth` | `session_token` 优先从浏览器 cookie 读取（含分片后缀匹配） |
-| `gateway/src/proxy.rs` — `suppressRefreshAccountNavigation` | 拦截 JS 层面的 `refresh_account` 跳转 |
-| `gateway/src/proxy.rs` — `sanitize_query` | 保留 `refresh_account` 查询参数透传给 ChatGPT |
-| `gateway/src/proxy.rs` — `rewrite_location` | 处理相对路径重定向中剥离 `refresh_account` 参数 |
-| `gateway/src/proxy.rs` — fetch wrapper `Request` 构造 | 添加 `duplex: 'half'` 支持 streaming body |
-| `gateway/src/proxy.rs` — 移除 `https://chatgpt.com/` → `/` 全局替换 | 避免 React hydration 错误 #418 |
-| `gateway/src/api.rs` — `resolve_browser_auth` | `session_token` 优先从浏览器 cookie 读取 |
-| `gateway/src/api.rs` — `gateway_auth_session` | `access_token` 过期时降级尝试 `session_token` 刷新并更新数据库 |
-| `gateway/src/api.rs` — `resolve_current_user_info` | 同上降级逻辑 |
-| `gateway/src/api.rs` — `extract_jwt_user_id/account_id/plan_type` | 从 JWT 中提取真实身份 ID，替代 `SHA256(email)` 假 ID |
-| `gateway/src/api.rs` — `build_backend_api_me_payload` | 使用真实 JWT user_id |
-| `gateway/src/api.rs` — `build_fallback_auth_session_payload` | 使用真实 JWT user_id + account_id |
-| `gateway/src/api.rs` — `build_backend_api_account_check_payload` | 使用真实 JWT user_id + account_id + plan_type |
-| `gateway/src/api.rs` — `gateway_backend_api_sources_dropdown` | 返回完整 payload 而非仅 backendCatalog |
-| `gateway/src/main.rs` — 路由注释掉本地处理 | `/api/auth/session`、`/backend-api/me`、`/backend-api/sources_dropdown`、`/backend-api/subscriptions`、`/backend-api/accounts/check/*` 等改为直连 ChatGPT，让 JS 拿到真实响应 |
+。。。。。。。
+
 
 ### 如果问题复现
 
