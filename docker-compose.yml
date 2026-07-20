@@ -1,0 +1,78 @@
+services:
+  chatgpt-mirror:
+    image: lisa666520/chatgpt-mirror-django:frontend
+    ports:
+      - "${PORT:-40002}:${PORT:-40002}"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - HOST=0.0.0.0
+      - PORT=${PORT:-40002}
+      - NO_PROXY=localhost,127.0.0.1,django,chatgpt-mirror,cfbypass
+      - no_proxy=localhost,127.0.0.1,django,chatgpt-mirror,cfbypass
+      - DATABASE_PATH=/app/data/chatgpt_mirror.db
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
+      - GATEWAY_ADMIN_SECRET=${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - MIRROR_API_PREFIX=${MIRROR_API_PREFIX:-}
+      - ALLOW_REGISTER=${ALLOW_REGISTER:-false}
+      - FREE_ACCOUNT_USERNAME=${FREE_ACCOUNT_USERNAME:-free_account}
+      - ADMIN_UPSTREAM=${ADMIN_UPSTREAM:-}
+      - DJANGO_UPSTREAM=http://django:8000
+      - CHATGPT_BASE_URL=${CHATGPT_BASE_URL:-https://chatgpt.com}
+      - CHATGPT_CDN_BASE_URL=${CHATGPT_CDN_BASE_URL:-https://cdn.oaistatic.com}
+      - CHATGPT_AB_BASE_URL=${CHATGPT_AB_BASE_URL:-https://ab.chatgpt.com}
+      - CF_BYPASS_URL=http://cfbypass:8000
+      - CF_BYPASS_PROXY_SERVER=${CF_BYPASS_PROXY_SERVER:-}
+      - REQUEST_TIMEOUT_SECS=${REQUEST_TIMEOUT_SECS:-180}
+      - RUST_LOG=${RUST_LOG:-info}
+    depends_on:
+      - django
+      - cfbypass
+    restart: unless-stopped
+    networks:
+      - chatgpt-network
+
+  django:
+    image: lisa666520/chatgpt-mirror-django:backend
+    ports:
+      - "127.0.0.1:18000:8000"
+    environment:
+      - DJANGO_ENV=PRODUCTION
+      - DJANGO_DEBUG=${DJANGO_DEBUG:-false}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set}
+      - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-django,localhost,127.0.0.1,Example.com}
+      - DJANGO_CSRF_TRUSTED_ORIGINS=${DJANGO_CSRF_TRUSTED_ORIGINS:-https://Example.com}
+      - DJANGO_SESSION_COOKIE_SECURE=${DJANGO_SESSION_COOKIE_SECURE:-true}
+      - DJANGO_CSRF_COOKIE_SECURE=${DJANGO_CSRF_COOKIE_SECURE:-true}
+      - SHOW_GITHUB=${SHOW_GITHUB:-true}
+      - NO_PROXY=localhost,127.0.0.1,django,chatgpt-mirror,cfbypass
+      - no_proxy=localhost,127.0.0.1,django,chatgpt-mirror,cfbypass
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
+      - GATEWAY_ADMIN_SECRET=${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set}
+      - ALLOW_REGISTER=${ALLOW_REGISTER:-false}
+      - FREE_ACCOUNT_USERNAME=${FREE_ACCOUNT_USERNAME:-free_account}
+      - CHATGPT_GATEWAY_URL=http://chatgpt-mirror:${PORT:-40002}
+    volumes:
+      - ./backend/logs:/app/backend/logs
+      - ./backend/db:/app/backend/db
+    restart: unless-stopped
+    networks:
+      - chatgpt-network
+
+  cfbypass:
+    image: lisa666520/chatgpt-mirror-django:cfbypass
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:18001:8000"
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    networks:
+      - chatgpt-network
+
+networks:
+  chatgpt-network:
+    driver: bridge

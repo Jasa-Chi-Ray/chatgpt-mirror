@@ -1,0 +1,26 @@
+{
+  "name": "chatgpt-mirror-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.5",
+    "pinia": "^2.1.7",
+    "tdesign-vue-next": "^1.8.0",
+    "dayjs": "^1.11.10",
+    "js-cookie": "^3.0.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "5.4.5",
+    "vite": "^5.0.0",
+    "vue-tsc": "^1.8.0",
+    "@types/js-cookie": "^3.0.6"
+  }
+}
