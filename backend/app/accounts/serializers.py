@@ -2,9 +2,15 @@ from rest_framework import serializers
 
 from app.accounts.models import User, VisitLog
 from app.chatgpt.models import ChatgptAccount
+from app.settings import ADMIN_USERNAME
 
 
 class ShowVisitLogModelSerializer(serializers.ModelSerializer):
+    is_protected = serializers.SerializerMethodField()
+
+    def get_is_protected(self, obj):
+        return obj.username == ADMIN_USERNAME and obj.log_type == "login"
+
     class Meta:
         model = VisitLog
         fields = "__all__"

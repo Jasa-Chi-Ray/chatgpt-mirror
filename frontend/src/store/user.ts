@@ -61,6 +61,14 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const logout = () => {
+    const currentToken = token.value
+    if (currentToken) {
+      void fetch('/0x/user/logout', {
+        method: 'POST',
+        keepalive: true,
+        headers: { Authorization: `token ${currentToken}` }
+      }).catch(() => undefined)
+    }
     token.value = ''
     isAdmin.value = false
     username.value = ''

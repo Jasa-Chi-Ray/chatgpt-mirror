@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-card title="脚本" :bordered="false">
+    <t-card title="脚本" subtitle="管理注入到页面中的自定义代码" :bordered="false">
       <template #actions>
         <t-space>
           <t-button variant="outline" :loading="loading" @click="fetchConfig">
@@ -200,10 +200,10 @@ const handleSave = async () => {
 }
 
 .script-row {
-  padding: 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  background: #fff;
+  padding: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: #fafaf8;
 }
 
 .script-title {

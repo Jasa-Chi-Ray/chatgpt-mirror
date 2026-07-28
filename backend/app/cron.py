@@ -1,5 +1,4 @@
 # myapp/cron.py
-import json
 import logging
 import time
 
@@ -40,14 +39,14 @@ def _update_token(chatgpt_username, chatgpt_token, client_id=None):
     res_json = res.json()
 
     if res.status_code != 200:
-        logger.info("token 更新失败: %s %s", chatgpt_username, json.dumps(res_json))
+        logger.info("token 更新失败: account=%s status=%s", chatgpt_username, res.status_code)
         message = res_json.get("message", "") if isinstance(res_json, dict) else str(res_json)
         if (
             "token 失效" in message
             or "authentication token" in message
             or "refresh_token" in message
         ):
-            logger.warning("token 失效 %s", json.dumps(res_json))
+            logger.warning("token 失效: account=%s status=%s", chatgpt_username, res.status_code)
             return False
         return None
 
@@ -70,17 +69,16 @@ def update_access_token():
                 client_id = locked.refresh_client_id or DEFAULT_REFRESH_CLIENT_ID
                 update_status = _update_token(locked.chatgpt_username, locked.refresh_token, client_id)
                 if update_status is False:
-                    expired_refresh_token = locked.refresh_token
                     locked.refresh_token = None
                     locked.save()
-                    logger.warning(f"refresh_token 已经过期: {locked.chatgpt_username}, rtoken: {expired_refresh_token}")
+                    logger.warning("refresh_token 已经过期: account=%s", locked.chatgpt_username)
 
         elif line.session_token:
             update_status = _update_token(line.chatgpt_username, line.session_token)
             if update_status is False:
                 line.session_token = None
                 line.save()
-                logger.warning(f"session_token 已经过期: {line.chatgpt_username}, stoken: {line.session_token}")
+                logger.warning("session_token 已经过期: account=%s", line.chatgpt_username)
 
 
 def check_access_token():

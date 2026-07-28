@@ -30,15 +30,14 @@ class ChatgptAccount(models.Model):
 
     @classmethod
     def get_by_gptcar_list(cls, gptcar_list):
+        if not gptcar_list:
+            return cls.objects.none()
+
         chatgpt_account_list = []
         for line in ChatgptCar.objects.filter(id__in=gptcar_list).values("gpt_account_list"):
             chatgpt_account_list.extend(line["gpt_account_list"])
 
-        gptaccount = ChatgptAccount.objects
-        if gptcar_list:
-            gptaccount = gptaccount.filter(id__in=chatgpt_account_list)
-
-        return gptaccount.order_by("-plan_type", "-id").all()
+        return cls.objects.filter(id__in=chatgpt_account_list).order_by("-plan_type", "-id")
 
 
     @classmethod

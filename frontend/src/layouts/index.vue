@@ -1,56 +1,58 @@
 <template>
   <div class="layout">
-    <t-layout>
-      <t-aside>
-        <div class="logo">
-          <span class="logo-bear" aria-hidden="true">🐻</span>
-          <span>ChatGPT Mirror</span>
+    <t-layout class="layout-shell">
+      <t-aside class="sidebar" width="232px">
+        <div class="sidebar-title">
+          管理
         </div>
-        <t-menu :value="activeMenu" theme="dark" @change="handleMenuChange">
+        <t-menu class="nav-menu" :value="activeMenu" theme="light" @change="handleMenuChange">
           <t-menu-item value="/account/user">
             <template #icon><t-icon name="user" /></template>
-            用户管理
+            <span class="menu-label">用户</span>
           </t-menu-item>
           <t-menu-item value="/account/chatgpt">
-            <template #icon><span class="menu-bear" aria-hidden="true">🐻</span></template>
-            ChatGPT账号
+            <template #icon><t-icon name="root-list" /></template>
+            <span class="menu-label">上游账号</span>
           </t-menu-item>
           <t-menu-item value="/account/gptcar">
             <template #icon><t-icon name="server" /></template>
-            号池管理
+            <span class="menu-label">账号池</span>
           </t-menu-item>
           <t-menu-item value="/account/logs">
             <template #icon><t-icon name="file" /></template>
-            访问日志
+            <span class="menu-label">日志</span>
           </t-menu-item>
           <t-menu-item value="/account/proxy">
             <template #icon><t-icon name="internet" /></template>
-            代理
+            <span class="menu-label">代理</span>
           </t-menu-item>
           <t-menu-item value="/account/scripts">
             <template #icon><t-icon name="code" /></template>
-            脚本
+            <span class="menu-label">脚本</span>
           </t-menu-item>
           <t-menu-item value="/account/access">
             <template #icon><t-icon name="secured" /></template>
-            访问限制
+            <span class="menu-label">访问与安全</span>
           </t-menu-item>
         </t-menu>
       </t-aside>
-      <t-layout>
+      <t-layout class="workspace">
         <t-header class="header">
+          <h1>{{ pageTitle }}</h1>
           <div class="header-right">
             <t-dropdown :options="userOptions" @click="handleUserAction">
-              <t-button variant="text">
+              <t-button class="user-button" variant="text">
                 <t-icon name="user-circle" />
                 {{ username }}
+                <t-icon name="chevron-down" />
               </t-button>
             </t-dropdown>
           </div>
         </t-header>
         <t-content class="content">
-          <router-view />
-          <div class="layout-footer">制作者:Xiaoxiong</div>
+          <div class="content-inner">
+            <router-view />
+          </div>
         </t-content>
       </t-layout>
     </t-layout>
@@ -68,6 +70,7 @@ const userStore = useUserStore()
 
 const activeMenu = computed(() => route.path)
 const username = computed(() => userStore.username || '管理员')
+const pageTitle = computed(() => String(route.meta.title || '管理'))
 
 const userOptions = [
   { content: '退出登录', value: 'logout' }
@@ -87,46 +90,84 @@ const handleUserAction = (data: { value: string }) => {
 
 <style scoped>
 .layout {
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-.logo {
+.layout-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  color: var(--app-text);
+  background: #f1f1ee;
+  border-right: 1px solid var(--app-border);
+}
+
+.sidebar-title {
   display: flex;
   align-items: center;
-  padding: 16px;
-  color: #fff;
-  font-size: 18px;
-  font-weight: bold;
+  height: 64px;
+  padding: 0 22px;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--app-border);
 }
 
-.logo-bear {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  margin-right: 8px;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
-  line-height: 1;
+.nav-menu {
+  padding: 12px 10px;
+  background: transparent;
 }
 
-.menu-bear {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  line-height: 1;
+.nav-menu :deep(.t-menu__item) {
+  height: 44px;
+  margin-bottom: 4px;
+  color: #555550;
+  border-radius: 8px;
+}
+
+.nav-menu :deep(.t-menu__item:hover) {
+  color: var(--app-text);
+  background: #e8e8e4;
+}
+
+.nav-menu :deep(.t-menu__item.t-is-active) {
+  color: var(--app-text);
+  font-weight: 600;
+  background: #dededa;
+}
+
+.workspace {
+  min-width: 0;
+  background: var(--app-bg);
 }
 
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
-  padding: 0 24px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  height: 64px;
+  padding: 0 32px;
+  background: rgba(247, 247, 245, 0.96);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.header h1 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .header-right {
@@ -134,16 +175,91 @@ const handleUserAction = (data: { value: string }) => {
   align-items: center;
 }
 
+.user-button {
+  color: #4f4f4b;
+  border-radius: 7px;
+}
+
+.user-button:hover {
+  color: var(--app-text);
+  background: #ecece8;
+}
+
 .content {
-  padding: 24px;
-  background: #f5f5f5;
+  padding: 32px;
+  background: var(--app-bg);
   min-height: calc(100vh - 64px);
 }
 
-.layout-footer {
-  margin-top: 24px;
-  text-align: center;
-  color: #6b7280;
-  font-size: 12px;
+.content-inner {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 76px !important;
+    flex-basis: 76px !important;
+  }
+
+  .sidebar-title {
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .sidebar-title::after {
+    font-size: 15px;
+    content: "管理";
+  }
+
+  .nav-menu {
+    padding: 12px 8px;
+  }
+
+  .nav-menu :deep(.t-menu__item) {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .menu-label {
+    display: none;
+  }
+
+  .header {
+    padding: 0 20px;
+  }
+
+  .content {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 560px) {
+  .sidebar {
+    width: 64px !important;
+    flex-basis: 64px !important;
+  }
+
+  .header {
+    padding: 0 16px;
+  }
+
+  .header h1 {
+    font-size: 16px;
+  }
+
+  .user-button {
+    font-size: 0;
+  }
+
+  .user-button :deep(.t-icon) {
+    font-size: 18px;
+  }
+
+  .content {
+    padding: 16px 12px;
+  }
 }
 </style>

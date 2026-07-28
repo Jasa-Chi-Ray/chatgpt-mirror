@@ -13,7 +13,7 @@ from app.chatgpt.serializers import ShowChatgptTokenSerializer, AddChatgptTokenS
     RefreshChatgptTokenSerializer
 from app.page import DefaultPageNumberPagination
 from app.settings import CHATGPT_GATEWAY_URL
-from app.utils import save_visit_log, req_gateway, get_client_ip
+from app.utils import get_request_subject, save_visit_log, req_gateway
 from app.accounts.models import User
 from rest_framework.exceptions import ValidationError
 
@@ -200,8 +200,6 @@ class ChatGPTLoginView(APIView):
     def post(self, request):
         serializer = ChatGPTLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        ip = get_client_ip(request)
-
         user_gpt_list = ChatgptAccount.get_by_gptcar_list(request.user.gptcar_list)
         user_gpt_id_list = [i.id for i in user_gpt_list]
 
@@ -216,7 +214,7 @@ class ChatGPTLoginView(APIView):
         if login_mode == "web" and not chatgpt.session_token_valid:
             raise ValidationError("该账号当前不支持 Web 模式，请联系管理员更新 SessionToken")
 
-        user_name = request.user.username + ip if request.user.username == "free_account" else request.user.username
+        user_name = get_request_subject(request)
         payload = {
             "user_name": user_name,
             "access_token": chatgpt.access_token,

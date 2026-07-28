@@ -181,6 +181,10 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "login_ip": "20/min",
+        "login_account": "10/min",
+    },
 }
 
 ROOT_URLCONF = "app.urls"

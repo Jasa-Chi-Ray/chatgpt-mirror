@@ -10,7 +10,7 @@ from app.accounts.serializers import ShowVisitLogModelSerializer, AddUserAccount
 from app.chatgpt.models import ChatgptAccount
 from app.page import DefaultPageNumberPagination
 from app.settings import ADMIN_USERNAME
-from app.utils import req_gateway
+from app.utils import get_request_subject, req_gateway
 from datetime import datetime
 
 
@@ -26,7 +26,7 @@ class GetMirrorToken(APIView):
             "isolated_session": user.isolated_session,
             "limits": user.model_limit,
             "chatgpt_list": chatgpt_username_list,
-            "user_name": user.username,
+            "user_name": get_request_subject(request),
         })
         for line in res:
             obj = ChatgptAccount.objects.filter(chatgpt_username=line["chatgpt_username"]).first()
@@ -213,3 +213,19 @@ class VisitLogView(generics.ListAPIView):
     queryset = VisitLog.objects.order_by("-id").all()
     serializer_class = ShowVisitLogModelSerializer
     pagination_class = DefaultPageNumberPagination
+
+    def delete(self, request, *args, **kwargs):
+        protected_logs = VisitLog.objects.filter(
+            username=ADMIN_USERNAME,
+            log_type="login",
+        )
+        protected_count = protected_logs.count()
+        deleted_count, _ = VisitLog.objects.exclude(
+            username=ADMIN_USERNAME,
+            log_type="login",
+        ).delete()
+        return Response({
+            "message": "日志已清除",
+            "deleted_count": deleted_count,
+            "protected_count": protected_count,
+        })

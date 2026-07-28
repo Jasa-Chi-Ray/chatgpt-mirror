@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-card title="用户管理" :bordered="false">
+    <t-card title="用户" subtitle="管理可访问系统的用户、账号池和模型权限" :bordered="false">
       <template #actions>
         <t-button theme="primary" @click="showAddDialog">
           <template #icon><t-icon name="add" /></template>
@@ -253,10 +253,11 @@ const handleDelete = async (row: any) => {
 
 <style scoped>
 .text-gray {
-  color: #999;
+  color: var(--app-text-muted);
 }
 .form-help {
-  color: #999;
+  color: var(--app-text-muted);
   font-size: 12px;
+  line-height: 1.6;
 }
 </style>

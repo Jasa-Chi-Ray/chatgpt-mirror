@@ -4,7 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from app.accounts.views import UserAccountView, UserRelateGPTCarView, VisitLogView, BatchModelLimit, \
     UserChatGPTAccountList, GetMirrorToken, MirrorProxyConfigView, MirrorProxyTestView, CustomScriptConfigView
-from app.accounts.views.login import AccountLogin, UserFreeLoginView, AccountRegister
+from app.accounts.views.login import AccountLogin, AccountLogout, UserFreeLoginView, AccountRegister
 from app.accounts.views.cfg import VersionConfig, AccessControlView
 
 urlpatterns = [
@@ -20,6 +20,7 @@ urlpatterns = [
     path("custom-scripts", CustomScriptConfigView.as_view()),
     path("relat-gptcar", UserRelateGPTCarView.as_view()),
     path("login", csrf_exempt(AccountLogin.as_view())),
+    path("logout", AccountLogout.as_view()),
     path("visit-log", VisitLogView.as_view()),
     path("access-control", AccessControlView.as_view()),
 ]

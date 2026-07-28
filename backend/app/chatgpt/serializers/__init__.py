@@ -40,9 +40,9 @@ class ShowChatgptTokenSerializer(serializers.ModelSerializer):
     supported_login_modes = serializers.SerializerMethodField()
     has_refresh_token = serializers.SerializerMethodField()
 
-    def __init__(self, *args, use_count_dict=dict, **kwargs):
+    def __init__(self, *args, use_count_dict=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.use_count_dict = use_count_dict
+        self.use_count_dict = use_count_dict or {}
 
     def get_use_count(self, obj):
         return self.use_count_dict.get(obj.chatgpt_username, 0)
@@ -67,7 +67,24 @@ class ShowChatgptTokenSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChatgptAccount
-        fields = "__all__"
+        fields = (
+            "id",
+            "chatgpt_username",
+            "auth_status",
+            "plan_type",
+            "access_token_valid",
+            "session_token_valid",
+            "proxy_node_id",
+            "last_check_at",
+            "last_error",
+            "remark",
+            "created_time",
+            "updated_time",
+            "access_token_exp",
+            "use_count",
+            "supported_login_modes",
+            "has_refresh_token",
+        )
 
 
 class AddChatgptTokenSerializer(serializers.Serializer):

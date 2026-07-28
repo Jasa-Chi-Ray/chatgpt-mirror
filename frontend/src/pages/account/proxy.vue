@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-card title="代理" :bordered="false">
+    <t-card title="代理" subtitle="为指定上游账号配置独立的网络出口" :bordered="false">
       <t-form :data="formData" label-width="110px" class="proxy-form">
         <t-form-item label="节点">
           <template #help>
@@ -216,11 +216,11 @@ const handleTestNode = async (node: ProxyNodeForm) => {
 .node-row {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  background: #fff;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: #fafaf8;
 }
 
 .node-title {

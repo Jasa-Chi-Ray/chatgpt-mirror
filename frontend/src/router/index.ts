@@ -49,25 +49,25 @@ const routes: RouteRecordRaw[] = [
         path: 'user',
         name: 'User',
         component: () => import('@/pages/account/user.vue'),
-        meta: { title: '用户管理', requiresAdmin: true }
+        meta: { title: '用户', requiresAdmin: true }
       },
       {
         path: 'chatgpt',
         name: 'ChatGPT',
         component: () => import('@/pages/account/chatgpt.vue'),
-        meta: { title: 'ChatGPT账号', requiresAdmin: true }
+        meta: { title: '上游账号', requiresAdmin: true }
       },
       {
         path: 'gptcar',
         name: 'GptCar',
         component: () => import('@/pages/account/gptcar.vue'),
-        meta: { title: '号池管理', requiresAdmin: true }
+        meta: { title: '账号池', requiresAdmin: true }
       },
       {
         path: 'logs',
         name: 'Logs',
         component: () => import('@/pages/account/logs.vue'),
-        meta: { title: '访问日志', requiresAdmin: true }
+        meta: { title: '日志', requiresAdmin: true }
       },
       {
         path: 'proxy',
@@ -85,7 +85,7 @@ const routes: RouteRecordRaw[] = [
         path: 'access',
         name: 'AccessControl',
         component: () => import('@/pages/account/access.vue'),
-        meta: { title: '访问限制', requiresAdmin: true }
+        meta: { title: '访问与安全', requiresAdmin: true }
       }
     ]
   }

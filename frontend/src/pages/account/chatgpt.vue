@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-card title="ChatGPT 账号管理" :bordered="false">
+    <t-card title="上游账号" subtitle="维护账号凭证、登录模式和连接状态" :bordered="false">
       <template #actions>
         <t-space>
           <t-button :loading="checkingAll" @click="handleCheckTokenExpiry()">
@@ -84,7 +84,7 @@
               检测
             </t-link>
             <t-link
-              v-if="row.has_refresh_token || row.refresh_token"
+              v-if="row.has_refresh_token"
               theme="primary"
               :loading="refreshingId === row.id"
               @click="handleRefreshToken(row)"
@@ -103,7 +103,7 @@
     <!-- 添加对话框 -->
     <t-dialog
       :visible="addDialogVisible"
-      header="添加 ChatGPT 账号"
+      header="添加上游账号"
       :confirm-btn="{ loading: submitLoading }"
       @confirm="handleAdd"
       @close="addDialogVisible = false"

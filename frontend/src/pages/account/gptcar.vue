@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-card title="号池管理" :bordered="false">
+    <t-card title="账号池" subtitle="将上游账号按使用场景组织为不同账号池" :bordered="false">
       <template #actions>
         <t-button theme="primary" @click="showAddDialog">
           <template #icon><t-icon name="add" /></template>
@@ -46,7 +46,7 @@
           <t-input v-model="formData.car_name" placeholder="请输入号池名称" />
         </t-form-item>
         <t-form-item label="关联账号" name="gpt_account_list">
-          <t-select v-model="formData.gpt_account_list" multiple placeholder="请选择 ChatGPT 账号">
+          <t-select v-model="formData.gpt_account_list" multiple placeholder="请选择上游账号">
             <t-option
               v-for="account in accountOptions"
               :key="account.id"
