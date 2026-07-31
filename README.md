@@ -48,6 +48,7 @@ ChatGPT Mirror 是一个面向多用户场景的 ChatGPT 镜像管理项目，�
 chatgpt-mirror/
 ├── backend/          # Django 服务端
 ├── frontend/         # Vue 管理后台
+├── cfbypass/         # Cloudflare 辅助服务
 ├── imageandvideo/    # README 图片与演示视频
 ├── docker-compose.yml
 └── vps-docker-compose.yml
@@ -95,7 +96,7 @@ npm install
 npm run dev
 ```
 
-开发页面默认访问地址：`http://localhost:40002/`。
+开发页面默认访问地址：`http://localhost:40002/admin/`。
 
 可用命令：
 
@@ -117,6 +118,12 @@ npm run preview  # 本地预览构建结果
 - 脚本：维护自定义脚本配置
 - 访问限制：配置禁止访问的路径
 
+## 路由说明
+
+- `/admin/*`：管理后台
+- `/0x/user/*`：用户管理接口
+- `/0x/chatgpt/*`：ChatGPT 账号管理接口
+
 
 
 ## 使用提示
@@ -131,23 +138,10 @@ npm run preview  # 本地预览构建结果
 env文件格式：
 
 ADMIN_USERNAME=admin
-
 ADMIN_PASSWORD=xxxxxxxxxxxxx你的密码
 
 GATEWAY_ADMIN_SECRET=xxxxxxxxxxx随机填写
-
 DJANGO_SECRET_KEY=随机填写
-
+CREDENTIAL_ENCRYPTION_KEY=至少32位随机密钥
 DJANGO_ALLOWED_HOSTS=django,localhost,127.0.0.1,你的域名
-
 DJANGO_CSRF_TRUSTED_ORIGINS=https://你的域名
-
-CLOUDFLARE_TURNSTILE=enable
-
-CLOUDFLARE_TURNSTILE_SITE_KEY=站点密钥
-
-CLOUDFLARE_TURNSTILE_SECRET_KEY=站点机密
-
-
-## 冷知识
-### 录入 token 时使用getCookie 插件获取全部 netscape 格式的内容可以一键导入哦！

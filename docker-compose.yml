@@ -16,6 +16,7 @@ services:
       ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}"
       GATEWAY_ADMIN_SECRET: "${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set}"
+      CREDENTIAL_ENCRYPTION_KEY: "${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set}"
       COOKIE_SECURE: "${COOKIE_SECURE:-true}"
       MIRROR_API_PREFIX: "${MIRROR_API_PREFIX:-}"
       ALLOW_REGISTER: "${ALLOW_REGISTER:-false}"
@@ -30,8 +31,10 @@ services:
       REQUEST_TIMEOUT_SECS: "${REQUEST_TIMEOUT_SECS:-180}"
       RUST_LOG: "${RUST_LOG:-info}"
     depends_on:
-      - django
-      - cfbypass
+      django:
+        condition: service_healthy
+      cfbypass:
+        condition: service_started
     restart: unless-stopped
     networks:
       - chatgpt-network
@@ -56,6 +59,8 @@ services:
       ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}"
       GATEWAY_ADMIN_SECRET: "${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set}"
+      CREDENTIAL_ENCRYPTION_KEY: "${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set}"
+      API_TOKEN_TTL_SECONDS: "${API_TOKEN_TTL_SECONDS:-604800}"
       ALLOW_REGISTER: "${ALLOW_REGISTER:-false}"
       FREE_ACCOUNT_USERNAME: "${FREE_ACCOUNT_USERNAME:-free_account}"
       CHATGPT_GATEWAY_URL: "http://chatgpt-mirror:${PORT:-40002}"
@@ -65,6 +70,16 @@ services:
     volumes:
       - ./backend/logs:/app/backend/logs
       - ./backend/db:/app/backend/db
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/0x/user/version-cfg', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
     restart: unless-stopped
     networks:
       - chatgpt-network
@@ -84,8 +99,13 @@ services:
       - "127.0.0.1:18001:8000"
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
+      CF_BYPASS_HEADLESS: "${CF_BYPASS_HEADLESS:-true}"
+      CF_BYPASS_MAX_WAIT_SECONDS: "${CF_BYPASS_MAX_WAIT_SECONDS:-35}"
+      CF_BYPASS_PARTIAL_COOKIE_GRACE_SECONDS: "${CF_BYPASS_PARTIAL_COOKIE_GRACE_SECONDS:-8}"
+      CF_BYPASS_NAVIGATION_RETRIES: "${CF_BYPASS_NAVIGATION_RETRIES:-2}"
       CF_BYPASS_SECRET: "${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set}"
       CF_BYPASS_ALLOWED_HOSTS: "${CF_BYPASS_ALLOWED_HOSTS:-chatgpt.com,.chatgpt.com}"
+    shm_size: "1gb"
     restart: unless-stopped
     networks:
       - chatgpt-network
