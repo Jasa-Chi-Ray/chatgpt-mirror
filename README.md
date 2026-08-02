@@ -145,3 +145,5 @@ DJANGO_SECRET_KEY=随机填写
 CREDENTIAL_ENCRYPTION_KEY=至少32位随机密钥
 DJANGO_ALLOWED_HOSTS=django,localhost,127.0.0.1,你的域名
 DJANGO_CSRF_TRUSTED_ORIGINS=https://你的域名
+.......
+详见.env.example文件
