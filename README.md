@@ -64,8 +64,7 @@ chatgpt-mirror/
 ├── frontend/                # 管理后台
 ├── imageandvideo/           # README 图片与演示视频
 ├── docker-compose.yml       # 本地部署编排
-├── vps-docker-compose.yml   # VPS 部署编排
-└── FAQ.md                   # 常见问题
+└── vps-docker-compose.yml   # VPS 部署编排
 ```
 
 > 非开源组件未在项目结构中展开。
@@ -119,7 +118,6 @@ docker compose down
 | 脚本管理 | 维护站点所需的自定义脚本配置 |
 | 访问限制 | 配置不允许镜像用户访问的页面或功能范围 |
 
-更多使用与排障说明见 [FAQ](./FAQ.md)。
 
 ## 安全与使用边界
 
