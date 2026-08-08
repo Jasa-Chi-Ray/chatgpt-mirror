@@ -78,8 +78,8 @@ Gateway 已内置代理配置功能，你只需要一个**高信誉住宅 IP 代
 **操作步骤：**
 
 1. **获取住宅代理**（任选一个）：
-   - [IPFoxy](https://www.ipfoxy.net/) / [IPWeb](https://ipweb.cc/) / [IPdodo](https://www.ipdodo.com/) — 静态住宅 IP
-   - [搬瓦工](https://bandwagonhost.com/) VPS（洛杉矶 DC1）— 干净独享 IP
+   -  静态住宅 IP
+   - [搬瓦工](https://bandwagonhost.com/) VPS（洛杉矶 DC1）— 偏干净独享 IP
    - [Cloudflare WARP](https://1.1.1.1/) IPv6 — 免费方案（仅 IPv6 出口干净，IPv4 已被标记）
 
 2. **在 Gateway 管理后台配置**：
@@ -129,9 +129,15 @@ environment:
 1. **`.env` 文件已配置**：
    ```
    ADMIN_USERNAME=admin
-   ADMIN_PASSWORD=你的密码
-   GATEWAY_ADMIN_SECRET=至少16位的随机密钥
+   ADMIN_PASSWORD=自行替换复杂的密码
+   GATEWAY_ADMIN_SECRET=随机密钥
    DJANGO_SECRET_KEY=随机密钥
+   CREDENTIAL_ENCRYPTION_KEY=至少32位随机密钥
+   DJANGO_ALLOWED_HOSTS=你的域名,django,localhost,127.0.0.1
+   DJANGO_CSRF_TRUSTED_ORIGINS=https://你的域名
+   CLOUDFLARE_TURNSTILE=开启enable/关闭disable，请自行选择
+   CLOUDFLARE_TURNSTILE_SITE_KEY=站点密钥
+   CLOUDFLARE_TURNSTILE_SECRET_KEY=站点机密
    ```
 
 2. **GATEWAY_ADMIN_SECRET 要求**：
@@ -214,18 +220,6 @@ Docker 日志出现：`读取客户端 WebSocket 消息失败: WebSocket protoco
 
 ## 7. 安全相关注意事项
 
-### 已强化的安全配置
-
-| 项目 | 说明 |
-|------|------|
-| GATEWAY_ADMIN_SECRET | 常量时间比较（防时序攻击），最少 16 字符，拒绝弱密码 |
-| Cookie 安全 | `SameSite=Lax`，`HttpOnly`（token），默认 `Secure`，`Max-Age=7天` |
-| SQL 注入 | 全部参数化查询 |
-| SSRF | `classify_external_upstream` 禁止内网 IP / localhost |
-| Mirror Token | `OsRng` + 32 字节 (256-bit) 密码学随机 |
-| 请求体限制 | 20 MB |
-| Hop-by-hop Header | 正确过滤 |
-| 生产配置 | `local.py` 不再有 `admin123` 回退值，强制从环境变量读取 |
 
 ### 生产部署前必须更改
 
@@ -272,10 +266,4 @@ docker logs -f chatgpt-mirror-chatgpt-mirror-1
                                 └── 需要 CF Bypass 服务的 cookie 支持
 ```
 
-**三层服务：**
 
-| 服务 | 镜像标签 | 端口 |
-|------|---------|------|
-| chatgpt-mirror (Rust Gateway + 前端) | `:frontend` | 40002 |
-| django | `:backend` | 8000 (内部) |
-| cfbypass | `:cfbypass` | 8000 (内部) |
