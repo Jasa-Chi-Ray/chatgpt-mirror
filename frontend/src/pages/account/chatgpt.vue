@@ -13,6 +13,14 @@
           </t-button>
         </t-space>
       </template>
+      <div class="account-toolbar">
+        <t-input v-model="query" clearable placeholder="搜索上游账号" @enter="applyFilters" />
+        <t-select v-model="statusFilter" clearable placeholder="全部状态" @change="applyFilters">
+          <t-option value="healthy" label="健康" />
+          <t-option value="unhealthy" label="异常" />
+        </t-select>
+        <t-button variant="outline" @click="applyFilters">查询</t-button>
+      </div>
 
       <t-table
         :data="tableData"
@@ -207,6 +215,8 @@ const checkingAll = ref(false)
 const checkingId = ref<number | null>(null)
 const refreshingId = ref<number | null>(null)
 const nowSeconds = ref(Math.floor(Date.now() / 1000))
+const query = ref('')
+const statusFilter = ref('')
 
 const pagination = reactive({
   current: 1,
@@ -298,7 +308,13 @@ const getTokenRemainingTheme = (row: any) => {
 
 const fetchData = async () => {
   loading.value = true
-  const data = await request(`/0x/chatgpt?page=${pagination.current}&page_size=${pagination.pageSize}`)
+  const params = new URLSearchParams({
+    page: String(pagination.current),
+    page_size: String(pagination.pageSize)
+  })
+  if (query.value.trim()) params.set('q', query.value.trim())
+  if (statusFilter.value) params.set('status', statusFilter.value)
+  const data = await request(`/0x/chatgpt?${params.toString()}`)
   loading.value = false
   
   if (data) {
@@ -306,6 +322,11 @@ const fetchData = async () => {
     tableData.value = data.results || []
     pagination.total = data.count || 0
   }
+}
+
+const applyFilters = () => {
+  pagination.current = 1
+  fetchData()
 }
 
 const fetchProxyNodes = async () => {
@@ -500,3 +521,12 @@ const handleDelete = async (row: any) => {
   }
 }
 </script>
+
+<style scoped>
+.account-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 180px auto;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+</style>

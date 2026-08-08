@@ -25,6 +25,6 @@ class AccessControlView(APIView):
         return Response(res)
 
     def post(self, request):
-        hash_paths = request.data.get("hash_paths", [])
-        res = req_gateway("post", "/api/blocked-paths", json={"hash_paths": hash_paths})
+        paths = request.data.get("paths", request.data.get("hash_paths", []))
+        res = req_gateway("post", "/api/blocked-paths", json={"paths": paths})
         return Response(res)

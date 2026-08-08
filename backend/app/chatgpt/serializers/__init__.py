@@ -120,5 +120,5 @@ class UpdateChatgptInfoSerializer(serializers.Serializer):
 
 
 class ChatGPTLoginSerializer(serializers.Serializer):
-    chatgpt_id = serializers.IntegerField()
+    chatgpt_id = serializers.IntegerField(required=False, allow_null=True)
     login_mode = serializers.ChoiceField(choices=["api", "web"], default="api", required=False)

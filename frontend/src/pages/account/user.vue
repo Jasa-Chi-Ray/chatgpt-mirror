@@ -7,6 +7,16 @@
           添加用户
         </t-button>
       </template>
+      <div class="table-toolbar">
+        <t-input v-model="query" clearable placeholder="搜索用户名或备注" @enter="applyFilters" />
+        <t-select v-model="statusFilter" clearable placeholder="全部状态" @change="applyFilters">
+          <t-option value="active" label="启用" />
+          <t-option value="inactive" label="禁用" />
+        </t-select>
+        <t-button variant="outline" @click="applyFilters">查询</t-button>
+        <t-button variant="outline" :disabled="!selectedRowKeys.length" @click="batchAction('activate')">批量启用</t-button>
+        <t-button variant="outline" :disabled="!selectedRowKeys.length" @click="batchAction('deactivate')">批量禁用</t-button>
+      </div>
 
       <t-table
         :data="tableData"
@@ -15,6 +25,7 @@
         :pagination="pagination"
         @page-change="onPageChange"
         row-key="id"
+        v-model:selected-row-keys="selectedRowKeys"
       >
         <template #is_active="{ row }">
           <t-tag :theme="row.is_active ? 'success' : 'danger'">
@@ -34,6 +45,11 @@
             </t-tag>
           </t-space>
           <span v-else class="text-gray">全部模型</span>
+        </template>
+        <template #force_chat_mode="{ row }">
+          <t-tag :theme="row.force_chat_mode !== false ? 'success' : 'default'">
+            {{ row.force_chat_mode !== false ? '自动切回' : '允许 Work' }}
+          </t-tag>
         </template>
         <template #op="{ row }">
           <t-space>
@@ -68,8 +84,20 @@
         <t-form-item label="独立会话" name="isolated_session">
           <t-switch v-model="formData.isolated_session" />
         </t-form-item>
+        <t-form-item label="自动退出 Work" name="force_chat_mode">
+          <t-switch v-model="formData.force_chat_mode" />
+          <template #help>
+            <span class="form-help">开启后检测到 Work 模式会自动点击“聊天 / Chat”切回聊天模式</span>
+          </template>
+        </t-form-item>
         <t-form-item label="过期日期" name="expired_date">
           <t-date-picker v-model="formData.expired_date" placeholder="留空则永久有效" />
+        </t-form-item>
+        <t-form-item label="每日配额" name="daily_quota">
+          <t-input-number v-model="formData.daily_quota" :min="0" />
+        </t-form-item>
+        <t-form-item label="每月配额" name="monthly_quota">
+          <t-input-number v-model="formData.monthly_quota" :min="0" />
         </t-form-item>
         <t-form-item label="关联号池" name="gptcar_list">
           <t-select v-model="formData.gptcar_list" multiple placeholder="请选择号池">
@@ -107,6 +135,9 @@ const formRef = ref()
 const tableData = ref<any[]>([])
 const carOptions = ref<any[]>([])
 const modelLimitInput = ref('')
+const query = ref('')
+const statusFilter = ref('')
+const selectedRowKeys = ref<Array<number | string>>([])
 
 const pagination = reactive({
   current: 1,
@@ -115,10 +146,12 @@ const pagination = reactive({
 })
 
 const columns = [
+  { colKey: 'row-select', type: 'multiple', width: 46 },
   { colKey: 'id', title: 'ID', width: 80 },
   { colKey: 'username', title: '用户名' },
   { colKey: 'is_active', title: '状态', cell: 'is_active', width: 80 },
   { colKey: 'model_limit', title: '模型限制', cell: 'model_limit', width: 180 },
+  { colKey: 'force_chat_mode', title: 'Work 模式', cell: 'force_chat_mode', width: 110 },
   { colKey: 'expired_date', title: '过期日期', cell: 'expired_date', width: 120 },
   { colKey: 'remark', title: '备注', ellipsis: true },
   { colKey: 'op', title: '操作', cell: 'op', width: 150 }
@@ -130,10 +163,13 @@ const formData = reactive({
   password: '',
   is_active: true,
   isolated_session: true,
+  force_chat_mode: true,
   expired_date: '',
   gptcar_list: [] as number[],
   model_limit: [] as string[],
-  remark: ''
+  remark: '',
+  daily_quota: 0,
+  monthly_quota: 0
 })
 
 const formRules = {
@@ -147,7 +183,13 @@ onMounted(() => {
 
 const fetchData = async () => {
   loading.value = true
-  const data = await request(`/0x/user?page=${pagination.current}&page_size=${pagination.pageSize}`)
+  const params = new URLSearchParams({
+    page: String(pagination.current),
+    page_size: String(pagination.pageSize)
+  })
+  if (query.value.trim()) params.set('q', query.value.trim())
+  if (statusFilter.value) params.set('status', statusFilter.value)
+  const data = await request(`/0x/user?${params.toString()}`)
   loading.value = false
   
   if (data) {
@@ -177,10 +219,13 @@ const showAddDialog = () => {
     password: '',
     is_active: true,
     isolated_session: true,
+    force_chat_mode: true,
     expired_date: '',
     gptcar_list: [],
     model_limit: [],
-    remark: ''
+    remark: '',
+    daily_quota: 0,
+    monthly_quota: 0
   })
   modelLimitInput.value = ''
   dialogVisible.value = true
@@ -194,10 +239,13 @@ const showEditDialog = (row: any) => {
     password: '',
     is_active: row.is_active,
     isolated_session: row.isolated_session ?? true,
+    force_chat_mode: row.force_chat_mode ?? true,
     expired_date: row.expired_date || '',
     gptcar_list: row.gptcar_list || [],
     model_limit: row.model_limit || [],
-    remark: row.remark || ''
+    remark: row.remark || '',
+    daily_quota: Number(row.daily_quota || 0),
+    monthly_quota: Number(row.monthly_quota || 0)
   })
   modelLimitInput.value = (row.model_limit || []).join(', ')
   dialogVisible.value = true
@@ -219,9 +267,12 @@ const handleSubmit = async () => {
     username: formData.username,
     is_active: formData.is_active,
     isolated_session: formData.isolated_session,
+    force_chat_mode: formData.force_chat_mode,
     gptcar_list: formData.gptcar_list,
     model_limit: modelLimit,
-    remark: formData.remark
+    remark: formData.remark,
+    daily_quota: formData.daily_quota,
+    monthly_quota: formData.monthly_quota
   }
 
   if (formData.password.trim()) {
@@ -249,6 +300,23 @@ const handleDelete = async (row: any) => {
     fetchData()
   }
 }
+
+const applyFilters = () => {
+  pagination.current = 1
+  fetchData()
+}
+
+const batchAction = async (action: 'activate' | 'deactivate') => {
+  const data = await request('/0x/user/batch', 'POST', {
+    user_id_list: selectedRowKeys.value.map(Number),
+    action
+  })
+  if (data) {
+    selectedRowKeys.value = []
+    MessagePlugin.success(data.message)
+    fetchData()
+  }
+}
 </script>
 
 <style scoped>
@@ -259,5 +327,11 @@ const handleDelete = async (row: any) => {
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+.table-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 160px auto auto auto;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 </style>

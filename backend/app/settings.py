@@ -179,13 +179,20 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        "app.accounts.authentication.ExpiringCookieTokenAuthentication",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "login_ip": "20/min",
         "login_account": "10/min",
+        "expensive_user": "30/min",
+        "user": "120/min",
     },
 }
+
+API_TOKEN_TTL_SECONDS = int(os.environ.get("API_TOKEN_TTL_SECONDS", str(7 * 24 * 60 * 60)))
 
 ROOT_URLCONF = "app.urls"
 

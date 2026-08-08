@@ -1,12 +1,8 @@
 import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router'
-
-function getCookie(name: string): string {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : ''
-}
+import { useUserStore } from '@/store/user'
 
 function hasChatGPTSession(): boolean {
-  return getCookie('chatgpt_username') !== '' && getCookie('mirror_token') !== ''
+  return false
 }
 
 function clearAccessibleCookies(): void {
@@ -43,8 +39,14 @@ const routes: RouteRecordRaw[] = [
     path: '/account',
     name: 'Account',
     component: () => import('@/layouts/index.vue'),
-    redirect: '/account/user',
+    redirect: '/account/overview',
     children: [
+      {
+        path: 'overview',
+        name: 'Overview',
+        component: () => import('@/pages/account/overview.vue'),
+        meta: { title: '运维概览', requiresAdmin: true }
+      },
       {
         path: 'user',
         name: 'User',
@@ -86,6 +88,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AccessControl',
         component: () => import('@/pages/account/access.vue'),
         meta: { title: '访问与安全', requiresAdmin: true }
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/pages/account/profile.vue'),
+        meta: { title: '账户中心' }
       }
     ]
   }
@@ -97,9 +105,8 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('admin_token')
-  const isAdmin = localStorage.getItem('is_admin') === 'true'
+router.beforeEach(async (to, _from, next) => {
+  const userStore = useUserStore()
   const isLoginPage = to.path === '/login' || to.path === '/login-chatgpt'
 
   if (isLoginPage && hasChatGPTSession()) {
@@ -108,17 +115,15 @@ router.beforeEach((to, _from, next) => {
     return
   }
 
-  if (to.meta.requiresAdmin && (!token || !isAdmin)) {
+  const authenticated = await userStore.hydrate()
+  if (to.meta.requiresAdmin && (!authenticated || !userStore.isAdmin)) {
     clearAccessibleCookies()
-    localStorage.removeItem('admin_token')
-    localStorage.removeItem('is_admin')
-    localStorage.removeItem('username')
     window.location.replace('/admin#/')
     next(false)
     return
   }
   
-  if (to.path !== '/login' && to.path !== '/register' && !token) {
+  if (to.path !== '/login' && to.path !== '/register' && !authenticated) {
     next('/login')
   } else {
     next()

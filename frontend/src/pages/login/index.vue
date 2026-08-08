@@ -288,9 +288,9 @@ const onSubmit = async ({ validateResult }: any) => {
         turnstile_token: turnstileToken.value
       })
       
-      if (data.admin_token && data.is_admin) {
+      if (data.authenticated && data.is_admin) {
         router.push({ name: 'User' })
-      } else if (data.admin_token) {
+      } else if (data.authenticated) {
         router.push({ name: 'LoginChatgpt' })
       }
     } catch (error: any) {
@@ -312,7 +312,7 @@ const goFree = async () => {
     const data = await userStore.login('/0x/user/login-free', {
       turnstile_token: turnstileToken.value
     })
-    if (data.admin_token) {
+    if (data.authenticated) {
       router.push({ name: 'LoginChatgpt' })
     }
   } catch (error: any) {

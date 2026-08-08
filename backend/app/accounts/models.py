@@ -9,6 +9,9 @@ class User(AbstractUser):
     isolated_session = models.BooleanField(default=True, verbose_name="独立回话")
     gptcar_list = models.JSONField(default=list)
     expired_date = models.DateField(blank=True, null=True, verbose_name="过期日期")
+    daily_quota = models.PositiveIntegerField(default=0, verbose_name="每日配额")
+    monthly_quota = models.PositiveIntegerField(default=0, verbose_name="每月配额")
+    force_chat_mode = models.BooleanField(default=True, verbose_name="自动退出 Work 模式")
 
 
 class VisitLog(models.Model):

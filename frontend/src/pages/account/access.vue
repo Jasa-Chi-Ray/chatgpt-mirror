@@ -1,13 +1,13 @@
 <template>
   <div class="settings-stack">
-    <t-card title="访问限制" subtitle="阻止用户进入指定的哈希路由路径" bordered>
+    <t-card title="访问限制" subtitle="阻止用户进入指定路径" bordered>
       <template #subtitle>
-        禁止用户访问指定的哈希路由路径，被拦截后会返回上一页并提示
+        支持普通路径和 # 哈希路径；命中路径及其子路径都会被拦截
       </template>
       <div class="section">
-        <h4>当前拦截的哈希路径</h4>
+        <h4>当前拦截路径</h4>
         <t-tag
-          v-for="(path, index) in hashPaths"
+          v-for="(path, index) in blockedPaths"
           :key="index"
           closable
           style="margin: 4px"
@@ -16,7 +16,7 @@
         >
           {{ path }}
         </t-tag>
-        <div v-if="hashPaths.length === 0" class="empty-text">
+        <div v-if="blockedPaths.length === 0" class="empty-text">
           暂无拦截路径
         </div>
       </div>
@@ -28,14 +28,16 @@
         <t-space style="margin-top: 12px">
           <t-input
             v-model="newPath"
-            placeholder="例如 #settings/Billing"
+            aria-label="拦截路径"
+            placeholder="例如 #settings/Account 或 library"
+            :maxlength="512"
             style="width: 300px"
             @keyup.enter="addPath"
           />
           <t-button theme="primary" @click="addPath">添加</t-button>
         </t-space>
         <div class="field-help">
-          请输入以 # 开头的哈希路径
+          无需输入开头的 /；不能填写完整 URL 或查询参数；保存后已打开页面会自动同步
         </div>
       </div>
 
@@ -49,7 +51,7 @@
             :key="preset"
             variant="outline"
             size="small"
-            :disabled="hashPaths.includes(preset)"
+            :disabled="hasPath(preset)"
             @click="addPreset(preset)"
           >
             {{ preset }}
@@ -106,7 +108,7 @@ import { ref, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
 
-const hashPaths = ref<string[]>([])
+const blockedPaths = ref<string[]>([])
 const newPath = ref('')
 const saving = ref(false)
 const saved = ref(false)
@@ -116,12 +118,11 @@ const turnstileCfg = ref({
 })
 
 const presets = [
-  '#settings/Billing',
-  '#settings/Notifications',
-  '#settings/Connectors',
+  '#settings/Personalization',
   '#settings/Security',
-  '#settings/ParentalControls',
+  '#settings/Billing',
   '#settings/Account',
+  '#settings/Safety',
   '#pricing',
 ]
 
@@ -130,7 +131,7 @@ onMounted(async () => {
     request('/0x/user/access-control'),
     fetch('/0x/user/version-cfg').then(response => response.json()).catch(() => null)
   ])
-  if (data) hashPaths.value = data.hash_paths || []
+  if (data) blockedPaths.value = (data.paths || data.hash_paths || []).map(toDisplayPath)
   if (versionResponse) {
     turnstileCfg.value.enabled = Boolean(versionResponse.turnstile_enabled)
     turnstileCfg.value.siteKeyConfigured = Boolean(versionResponse.turnstile_site_key)
@@ -138,38 +139,79 @@ onMounted(async () => {
 })
 
 function addPath() {
-  const p = newPath.value.trim()
-  if (!p) return
-  if (!p.startsWith('#')) {
-    MessagePlugin.warning('路径必须以 # 开头')
+  const rawPath = newPath.value.trim()
+  const validationError = validatePath(rawPath)
+  if (validationError) {
+    MessagePlugin.warning(validationError)
     return
   }
-  if (hashPaths.value.includes(p)) {
+  const p = toDisplayPath(rawPath)
+  if (!p) return
+  if (blockedPaths.value.length >= 200) {
+    MessagePlugin.warning('拦截路径最多允许 200 条')
+    return
+  }
+  if (hasPath(p)) {
     MessagePlugin.warning('路径已存在')
     return
   }
-  hashPaths.value.push(p)
+  blockedPaths.value.push(p)
   newPath.value = ''
   saved.value = false
 }
 
 function removePath(index: number) {
-  hashPaths.value.splice(index, 1)
+  blockedPaths.value.splice(index, 1)
   saved.value = false
 }
 
 function addPreset(p: string) {
-  if (!hashPaths.value.includes(p)) {
-    hashPaths.value.push(p)
+  if (!hasPath(p)) {
+    blockedPaths.value.push(p)
     saved.value = false
   }
+}
+
+function pathKey(path: string) {
+  return toDisplayPath(path).replace(/\/+$/, '')
+}
+
+function toDisplayPath(path: string) {
+  return path.trim().replace(/^\/+/, '')
+}
+
+function validatePath(path: string) {
+  if (path.length > 512) return '单条拦截路径不能超过 512 个字符'
+  if (!path || path === '/') return '不能拦截站点根路径'
+  if (/[^\x21-\x7e]/.test(path)) return '拦截路径只能包含不带空白的 ASCII 字符'
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(path) || path.startsWith('//')) {
+    return '请填写站内路径，不能填写完整 URL'
+  }
+  const normalized = toDisplayPath(path)
+  if (normalized.includes('\\') || normalized.split('/').some(segment => segment === '.' || segment === '..')) {
+    return '拦截路径不能包含反斜杠或相对路径段'
+  }
+  if (normalized.includes('?')) return '拦截路径不能包含查询参数'
+  if (normalized.includes('#') && !normalized.startsWith('#')) return '# 只能用于开头的哈希路径'
+  if (normalized === '#') return '哈希路径不能只有 #'
+  const lower = normalized.toLowerCase()
+  if (lower === '#settings/plugins' || lower.startsWith('#settings/plugins/')) {
+    return '#settings/Plugins 是系统保留路径，不能拦截'
+  }
+  return ''
+}
+
+function hasPath(path: string) {
+  const key = pathKey(path)
+  return blockedPaths.value.some(item => pathKey(item) === key)
 }
 
 async function save() {
   saving.value = true
   saved.value = false
-  const data = await request('/0x/user/access-control', 'POST', { hash_paths: hashPaths.value })
+  const data = await request('/0x/user/access-control', 'POST', { paths: blockedPaths.value })
   if (data) {
+    blockedPaths.value = (data.paths || data.hash_paths || blockedPaths.value).map(toDisplayPath)
     saved.value = true
     MessagePlugin.success('配置已保存')
   } else {

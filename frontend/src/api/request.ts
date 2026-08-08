@@ -58,14 +58,15 @@ const parseResponseBody = async (response: Response) => {
 
 const request = async (url: string, method = 'GET', body?: any) => {
   const userStore = useUserStore()
-  const { token } = userStore
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
   }
 
-  if (token) {
-    headers['Authorization'] = `token ${token}`
+  const csrfToken =
+    userStore.csrfToken || document.cookie.match(/(?:^|; )csrftoken=([^;]*)/)?.[1]
+  if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) {
+    headers['X-CSRFToken'] = decodeURIComponent(csrfToken)
   }
 
   try {
@@ -75,6 +76,11 @@ const request = async (url: string, method = 'GET', body?: any) => {
       body: body ? JSON.stringify(body) : undefined
     })
 
+    const data = await parseResponseBody(response)
+    if (data?.csrf_token) {
+      userStore.setCsrfToken(data.csrf_token)
+    }
+
     if (response.status === 401) {
       userStore.logout()
       router.push('/login')
@@ -82,7 +88,7 @@ const request = async (url: string, method = 'GET', body?: any) => {
     }
 
     if (response.status === 403) {
-      MessagePlugin.error('没有权限')
+      MessagePlugin.error(extractErrorMessage(data || { message: '没有权限' }))
       return null
     }
 
@@ -90,8 +96,6 @@ const request = async (url: string, method = 'GET', body?: any) => {
       MessagePlugin.error('系统异常')
       return null
     }
-
-    const data = await parseResponseBody(response)
 
     if (!response.ok) {
       const error = data || { message: `请求失败 (${response.status})` }

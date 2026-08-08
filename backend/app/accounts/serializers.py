@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from app.accounts.models import User, VisitLog
 from app.chatgpt.models import ChatgptAccount
@@ -49,6 +51,21 @@ class AddUserAccountSerializer(serializers.Serializer):
     remark = serializers.CharField(default="", allow_blank=True)
     isolated_session = serializers.BooleanField()
     expired_date = serializers.DateField(required=False, allow_null=True)
+    daily_quota = serializers.IntegerField(required=False, min_value=0, default=0)
+    monthly_quota = serializers.IntegerField(required=False, min_value=0, default=0)
+    force_chat_mode = serializers.BooleanField(required=False)
+
+    def validate_password(self, value):
+        if not value:
+            return value
+        try:
+            validate_password(
+                value,
+                User(username=str(self.initial_data.get("username") or "")),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
 
 
 class BatchModelLimitSerializer(serializers.Serializer):
@@ -61,7 +78,36 @@ class UserBindChatGPTSerializer(serializers.Serializer):
     gptcar_id_list = serializers.ListField(child=serializers.IntegerField())
 
 
+class BatchUserActionSerializer(serializers.Serializer):
+    user_id_list = serializers.ListField(
+        child=serializers.IntegerField(), min_length=1, max_length=200
+    )
+    action = serializers.ChoiceField(choices=["activate", "deactivate", "delete"])
+
+
 class UserRegisterSerializer(serializers.Serializer):
     username = serializers.CharField(min_length=4)
     password = serializers.CharField()
     chatgpt_token = serializers.CharField()
+
+    def validate_password(self, value):
+        try:
+            validate_password(
+                value,
+                User(username=str(self.initial_data.get("username") or "")),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField()
+    new_password = serializers.CharField()
+
+    def validate_new_password(self, value):
+        try:
+            validate_password(value, self.context.get("user"))
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value

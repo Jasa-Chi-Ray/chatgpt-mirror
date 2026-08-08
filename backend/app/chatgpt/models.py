@@ -1,6 +1,7 @@
 import time
 
 from django.db import models
+from app.fields import EncryptedJSONField, EncryptedTextField
 
 
 class ChatgptCar(models.Model):
@@ -14,11 +15,11 @@ class ChatgptAccount(models.Model):
     chatgpt_username = models.CharField(max_length=64, unique=True)
     auth_status = models.BooleanField(default=True, verbose_name="授权状态")
     plan_type = models.CharField(max_length=32)
-    access_token = models.TextField()
-    session_token = models.TextField(null=True, blank=True)
-    extra_cookies = models.JSONField(default=list, blank=True, verbose_name="额外 Cookie")
-    refresh_token = models.TextField(null=True, blank=True)
-    refresh_client_id = models.CharField(max_length=128, null=True, blank=True)
+    access_token = EncryptedTextField()
+    session_token = EncryptedTextField(null=True, blank=True)
+    extra_cookies = EncryptedJSONField(default=list, blank=True, verbose_name="额外 Cookie")
+    refresh_token = EncryptedTextField(null=True, blank=True)
+    refresh_client_id = EncryptedTextField(null=True, blank=True)
     access_token_valid = models.BooleanField(default=False, verbose_name="AccessToken 可用")
     session_token_valid = models.BooleanField(default=False, verbose_name="SessionToken 可用")
     proxy_node_id = models.IntegerField(null=True, blank=True, verbose_name="代理节点")

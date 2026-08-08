@@ -4,8 +4,10 @@ from django.views.decorators.csrf import csrf_exempt
 
 from app.accounts.views import UserAccountView, UserRelateGPTCarView, VisitLogView, BatchModelLimit, \
     UserChatGPTAccountList, GetMirrorToken, MirrorProxyConfigView, MirrorProxyTestView, CustomScriptConfigView
+from app.accounts.views import BatchUserActionView, CurrentUserView, ChangePasswordView, QuotaView, OperationsOverviewView
 from app.accounts.views.login import AccountLogin, AccountLogout, UserFreeLoginView, AccountRegister
 from app.accounts.views.cfg import VersionConfig, AccessControlView
+from app.accounts.views.backup import UnifiedBackupView
 
 urlpatterns = [
     path("", UserAccountView.as_view()),
@@ -23,4 +25,10 @@ urlpatterns = [
     path("logout", AccountLogout.as_view()),
     path("visit-log", VisitLogView.as_view()),
     path("access-control", AccessControlView.as_view()),
+    path("me", CurrentUserView.as_view()),
+    path("change-password", ChangePasswordView.as_view()),
+    path("quota", QuotaView.as_view()),
+    path("overview", OperationsOverviewView.as_view()),
+    path("batch", BatchUserActionView.as_view()),
+    path("backup", UnifiedBackupView.as_view()),
 ]

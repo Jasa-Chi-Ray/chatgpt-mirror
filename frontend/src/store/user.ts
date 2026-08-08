@@ -12,23 +12,22 @@ const clearAccessibleCookies = () => {
 }
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref(localStorage.getItem('admin_token') || '')
-  const isAdmin = ref(localStorage.getItem('is_admin') === 'true')
-  const username = ref(localStorage.getItem('username') || '')
-
-  const setToken = (newToken: string) => {
-    token.value = newToken
-    localStorage.setItem('admin_token', newToken)
-  }
+  const authenticated = ref(false)
+  const isAdmin = ref(false)
+  const username = ref('')
+  const csrfToken = ref('')
+  let hydrated = false
 
   const setIsAdmin = (admin: boolean) => {
     isAdmin.value = admin
-    localStorage.setItem('is_admin', String(admin))
   }
 
   const setUsername = (name: string) => {
     username.value = name
-    localStorage.setItem('username', name)
+  }
+
+  const setCsrfToken = (token: string) => {
+    csrfToken.value = token
   }
 
   const login = async (url: string, data: any) => {
@@ -47,45 +46,63 @@ export const useUserStore = defineStore('user', () => {
 
     const result = await response.json()
     
-    if (result.admin_token) {
-      setToken(result.admin_token)
-      if (data.username) {
-        setUsername(data.username)
-      }
-      if (result.is_admin) {
-        setIsAdmin(true)
-      }
-    }
+    authenticated.value = Boolean(result.authenticated)
+    setUsername(result.username || data.username || '')
+    setIsAdmin(Boolean(result.is_admin))
+    setCsrfToken(result.csrf_token || '')
+    hydrated = true
 
     return result
   }
 
-  const logout = () => {
-    const currentToken = token.value
-    if (currentToken) {
-      void fetch('/0x/user/logout', {
-        method: 'POST',
-        keepalive: true,
-        headers: { Authorization: `token ${currentToken}` }
-      }).catch(() => undefined)
+  const hydrate = async () => {
+    if (hydrated) return authenticated.value
+    hydrated = true
+    try {
+      const response = await fetch('/0x/user/me')
+      if (!response.ok) return false
+      const result = await response.json()
+      authenticated.value = Boolean(result.authenticated)
+      isAdmin.value = Boolean(result.is_admin)
+      username.value = result.username || ''
+      csrfToken.value = result.csrf_token || ''
+      return authenticated.value
+    } catch {
+      return false
     }
-    token.value = ''
+  }
+
+  const logout = async () => {
+    const activeCsrfToken =
+      csrfToken.value || document.cookie.match(/(?:^|; )csrftoken=([^;]*)/)?.[1] || ''
+    if (authenticated.value) {
+      try {
+        await fetch('/0x/user/logout', {
+          method: 'POST',
+          keepalive: true,
+          headers: activeCsrfToken ? { 'X-CSRFToken': decodeURIComponent(activeCsrfToken) } : {}
+        })
+      } catch {
+        // 本地状态仍需清理；服务端 Token 会按 TTL 自动过期。
+      }
+    }
+    authenticated.value = false
     isAdmin.value = false
     username.value = ''
-    localStorage.removeItem('admin_token')
-    localStorage.removeItem('is_admin')
-    localStorage.removeItem('username')
+    csrfToken.value = ''
     clearAccessibleCookies()
   }
 
   return {
-    token,
+    authenticated,
     isAdmin,
     username,
-    setToken,
+    csrfToken,
     setIsAdmin,
     setUsername,
+    setCsrfToken,
     login,
+    hydrate,
     logout
   }
 })

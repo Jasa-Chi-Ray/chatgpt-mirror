@@ -25,6 +25,12 @@
               <t-radio-button value="web">混合模式</t-radio-button>
             </t-radio-group>
           </div>
+          <t-space>
+            <t-button theme="primary" :disabled="tableLoading" @click="onSelect(null)">
+              智能分配最空闲账号
+            </t-button>
+            <t-button variant="text" @click="router.push('/account/profile')">账户中心</t-button>
+          </t-space>
           <t-alert
             v-if="selectedMode === 'api'"
             theme="info"
@@ -141,7 +147,7 @@ onMounted(async () => {
 })
 
 const getGPTUsePercent = (item: TableData) => {
-  const MaxLimitCount = item.plan_type === 'free' ? 20 : 80
+  const MaxLimitCount = item.plan_type === 'free' ? 80 : 320
   return Math.min((item.use_count / MaxLimitCount) * 100 + 1, 99)
 }
 
@@ -196,7 +202,7 @@ const supportsMode = (item: TableData, mode: 'api' | 'web') => {
   return Array.isArray(item.supported_login_modes) && item.supported_login_modes.includes(mode)
 }
 
-const onSelect = async (chatgptId: number) => {
+const onSelect = async (chatgptId: number | null) => {
   const current = tableData.value.find(item => item.id === chatgptId)
   if (current && !supportsMode(current, selectedMode.value)) {
     MessagePlugin.warning(

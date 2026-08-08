@@ -66,6 +66,12 @@ class ChatGPTAccountView(generics.ListCreateAPIView):
 
     def get(self, request, *args, **kwargs):
         queryset = ChatgptAccount.objects.order_by("-id").all()
+        query = str(request.query_params.get("q") or "").strip()
+        if query:
+            queryset = queryset.filter(chatgpt_username__icontains=query)
+        status = request.query_params.get("status")
+        if status in ("healthy", "unhealthy"):
+            queryset = queryset.filter(auth_status=status == "healthy")
         pg = DefaultPageNumberPagination()
         pg.page_size_query_param = "page_size"
         page_accounts = pg.paginate_queryset(queryset, request=request)
@@ -203,11 +209,32 @@ class ChatGPTLoginView(APIView):
         user_gpt_list = ChatgptAccount.get_by_gptcar_list(request.user.gptcar_list)
         user_gpt_id_list = [i.id for i in user_gpt_list]
 
-        if serializer.data["chatgpt_id"] not in user_gpt_id_list:
+        login_mode = serializer.data.get("login_mode", "api")
+        chatgpt_id = serializer.validated_data.get("chatgpt_id")
+        if chatgpt_id is not None and chatgpt_id not in user_gpt_id_list:
             raise ValidationError("该账号不属于当前用户")
 
-        chatgpt = ChatgptAccount.get_by_id(serializer.data["chatgpt_id"])
-        login_mode = serializer.data.get("login_mode", "api")
+        if chatgpt_id is None:
+            candidates = [
+                item for item in user_gpt_list
+                if item.auth_status and (
+                    (login_mode == "api" and item.access_token_valid)
+                    or (login_mode == "web" and item.session_token_valid)
+                )
+            ]
+            if not candidates:
+                raise ValidationError("账号池中没有可用上游账号")
+            use_counts = req_gateway("post", "/api/get-chatgpt-use-count", json={
+                "chatgpt_list": [item.chatgpt_username for item in candidates],
+            })
+            def usage_score(item):
+                hourly = use_counts.get(item.chatgpt_username, {}).get("gpt-4o", {})
+                return sum(int(hourly.get(key, 0)) for key in (
+                    "last_1h", "last_2h", "last_3h", "last_4h"
+                ))
+            chatgpt = min(candidates, key=usage_score)
+        else:
+            chatgpt = ChatgptAccount.get_by_id(chatgpt_id)
 
         if login_mode == "api" and not chatgpt.access_token_valid:
             raise ValidationError("该账号当前不支持 API 模式，请联系管理员更新 AccessToken")
@@ -222,8 +249,13 @@ class ChatGPTLoginView(APIView):
             "extra_cookies": chatgpt.extra_cookies,
             "login_mode": login_mode,
             "isolated_session": request.user.isolated_session,
-            "limits": request.user.model_limit,
+            "limits": [
+                item for item in (request.user.model_limit or []) if isinstance(item, str)
+            ],
             "proxy_node_id": chatgpt.proxy_node_id,
+            "daily_quota": request.user.daily_quota,
+            "monthly_quota": request.user.monthly_quota,
+            "force_chat_mode": request.user.force_chat_mode,
         }
         # print(payload)
         res_json = req_gateway("post", "/api/login", json=payload)

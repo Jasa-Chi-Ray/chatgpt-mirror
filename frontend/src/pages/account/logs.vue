@@ -11,6 +11,15 @@
           </t-button>
         </t-popconfirm>
       </template>
+      <div class="log-toolbar">
+        <t-input v-model="query" clearable placeholder="搜索用户或上游账号" @enter="applyFilters" />
+        <t-select v-model="logType" clearable placeholder="全部类型" @change="applyFilters">
+          <t-option value="login" label="登录" />
+          <t-option value="choose-gpt" label="选择账号" />
+          <t-option value="proxy" label="代理请求" />
+        </t-select>
+        <t-button variant="outline" @click="applyFilters">查询</t-button>
+      </div>
       <t-table
         :data="tableData"
         :columns="columns"
@@ -45,6 +54,8 @@ import request from '@/api/request'
 const loading = ref(false)
 const clearing = ref(false)
 const tableData = ref<any[]>([])
+const query = ref('')
+const logType = ref('')
 
 const pagination = reactive({
   current: 1,
@@ -68,7 +79,13 @@ onMounted(() => {
 
 const fetchData = async () => {
   loading.value = true
-  const data = await request(`/0x/user/visit-log?page=${pagination.current}&page_size=${pagination.pageSize}`)
+  const params = new URLSearchParams({
+    page: String(pagination.current),
+    page_size: String(pagination.pageSize)
+  })
+  if (query.value.trim()) params.set('q', query.value.trim())
+  if (logType.value) params.set('log_type', logType.value)
+  const data = await request(`/0x/user/visit-log?${params.toString()}`)
   loading.value = false
   
   if (data) {
@@ -80,6 +97,11 @@ const fetchData = async () => {
 const onPageChange = (pageInfo: any) => {
   pagination.current = pageInfo.current
   pagination.pageSize = pageInfo.pageSize
+  fetchData()
+}
+
+const applyFilters = () => {
+  pagination.current = 1
   fetchData()
 }
 
@@ -105,7 +127,8 @@ const getLogTypeTheme = (type: string) => {
   const themes: Record<string, string> = {
     'login': 'success',
     'choose-gpt': 'primary',
-    'logout': 'warning'
+    'logout': 'warning',
+    'proxy': 'default'
   }
   return themes[type] || 'default'
 }
@@ -114,7 +137,8 @@ const getLogTypeText = (type: string) => {
   const texts: Record<string, string> = {
     'login': '登录',
     'choose-gpt': '选择账号',
-    'logout': '登出'
+    'logout': '登出',
+    'proxy': '代理请求'
   }
   return texts[type] || type
 }
@@ -134,5 +158,11 @@ const formatTime = (timestamp: number) => {
   line-height: 16px;
   background: #efefec;
   border-radius: 4px;
+}
+.log-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 180px auto;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 </style>

@@ -35,7 +35,7 @@
                 :disabled="!node.enabled"
                 type="password"
                 clearable
-                placeholder="密码"
+                :placeholder="node.has_password ? '已保存（留空保持不变）' : '密码'"
               />
               <div class="node-actions">
                 <t-button size="small" variant="outline" :loading="testingNodeId === node.localKey" @click="handleTestNode(node)">
@@ -80,6 +80,7 @@ type ProxyNodeForm = {
   proxy_url: string
   username: string
   password: string
+  has_password: boolean
 }
 
 let nextLocalKey = 1
@@ -99,7 +100,8 @@ const createNode = (data: any = {}): ProxyNodeForm => ({
   enabled: Boolean(data.enabled),
   proxy_url: data.proxy_url || '',
   username: data.username || '',
-  password: data.password || ''
+  password: data.password || '',
+  has_password: Boolean(data.has_password)
 })
 
 onMounted(() => {

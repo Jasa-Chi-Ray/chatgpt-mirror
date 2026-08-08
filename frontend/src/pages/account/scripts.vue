@@ -89,14 +89,7 @@ const formData = reactive<{ scripts: ScriptForm[] }>({
   scripts: []
 })
 
-const languageOptions = [
-  { label: 'JavaScript', value: 'javascript' },
-  { label: 'CSS', value: 'css' },
-  { label: 'HTML', value: 'html' },
-  { label: 'Vue', value: 'vue' },
-  { label: 'Next.js', value: 'nextjs' },
-  { label: 'TypeScript', value: 'typescript' }
-]
+const languageOptions = [{ label: 'CSS', value: 'css' }]
 
 const positionOptions = [
   { label: 'head 开始', value: 'head_start' },
@@ -119,7 +112,7 @@ const createScript = (data: any = {}): ScriptForm => ({
   id: Number(data.id) || nextScriptId(),
   enabled: Boolean(data.enabled),
   name: data.name || '',
-  language: data.language || 'javascript',
+  language: 'css',
   position: data.position || 'head_end',
   content: data.content || ''
 })

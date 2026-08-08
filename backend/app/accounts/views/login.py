@@ -2,8 +2,9 @@ import time
 import hashlib
 
 import requests
-from django.contrib.auth import authenticate
 from django.conf import settings
+from django.db import transaction
+from django.middleware.csrf import get_token, rotate_token
 from django.utils import timezone
 from requests.exceptions import RequestException
 from rest_framework.authtoken.models import Token
@@ -15,6 +16,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 from app.accounts.models import User
+from app.accounts.authentication import clear_auth_cookie, set_auth_cookie
 from app.accounts.serializers import UserRegisterSerializer
 from app.chatgpt.models import ChatgptAccount
 from app.settings import ADMIN_USERNAME, FREE_ACCOUNT_USERNAME
@@ -79,6 +81,7 @@ def issue_user_token(user, *, rotate=False):
 
 
 class UserFreeLoginView(APIView):
+    authentication_classes = ()
     throttle_classes = (LoginIpRateThrottle,)
 
     def post(self, request):
@@ -91,7 +94,14 @@ class UserFreeLoginView(APIView):
         token = issue_user_token(user)
         save_visit_log(request, "login")
 
-        response = Response({"admin_token": token.key})
+        rotate_token(request)
+        response = Response({
+            "authenticated": True,
+            "is_admin": False,
+            "username": user.username,
+            "csrf_token": get_token(request),
+        })
+        set_auth_cookie(response, token)
         response.set_cookie(
             "free_session",
             issue_free_session(),
@@ -105,6 +115,7 @@ class UserFreeLoginView(APIView):
 
 
 class AccountLogin(ObtainAuthToken):
+    authentication_classes = ()
     throttle_classes = (LoginIpRateThrottle, LoginAccountRateThrottle)
 
     def post(self, request, *args, **kwargs):
@@ -124,10 +135,17 @@ class AccountLogin(ObtainAuthToken):
 
         save_visit_log(request, "login")
 
-        result = {'admin_token': token.key}
+        rotate_token(request)
+        result = {
+            "authenticated": True,
+            "username": user.username,
+            "csrf_token": get_token(request),
+        }
         if user.is_staff or user.is_superuser:
             result.update({"is_admin": True})
-        return Response(result)
+        response = Response(result)
+        set_auth_cookie(response, token)
+        return response
 
 
 class AccountLogout(APIView):
@@ -145,10 +163,12 @@ class AccountLogout(APIView):
 
         response = Response({"message": "退出成功"})
         response.delete_cookie("free_session", path="/", samesite="Strict")
+        clear_auth_cookie(response)
         return response
 
 
 class AccountRegister(APIView):
+    authentication_classes = ()
     throttle_classes = (LoginIpRateThrottle, LoginAccountRateThrottle)
     def post(self, request, *args, **kwargs):
         verify_turnstile(request, "register")
@@ -158,37 +178,38 @@ class AccountRegister(APIView):
 
         serializer = UserRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        if serializer.data["username"] == ADMIN_USERNAME:
+        data = serializer.validated_data
+        if data["username"] == ADMIN_USERNAME:
             raise ValidationError({"message": "该用户名不可注册"})
-
-        res_json = req_gateway("post", "/api/get-user-info", json={"chatgpt_token": serializer.data["chatgpt_token"]})
-        chatgptaccount_id = ChatgptAccount.save_data(res_json)
-
-        user = User.objects.filter(username=serializer.data["username"]).first()
-        if user and not authenticate(username=serializer.data["username"], password=serializer.data["password"]):
+        if User.objects.filter(username=data["username"]).exists():
             raise ValidationError({"message": "账号已存在"})
 
-        # 创建默认号池
-        from app.chatgpt.models import ChatgptCar
-        chatgptcar, created = ChatgptCar.objects.get_or_create(
-            car_name="reg_{}".format(serializer.data["username"]),
-            defaults={
-                "created_time": int(time.time()),
-                "updated_time": int(time.time()),
-                "remark": "用户注册时，系统自动创建"
-            })
-        gpt_account_list = list(chatgptcar.gpt_account_list)
-        gpt_account_list.append(chatgptaccount_id)
-        chatgptcar.gpt_account_list = list(set(gpt_account_list))
-        chatgptcar.save()
+        res_json = req_gateway("post", "/api/get-user-info", json={"chatgpt_token": data["chatgpt_token"]})
 
-        user, created = User.objects.get_or_create(username=serializer.data["username"])
-        user.set_password(serializer.data["password"])
-        user.last_login = timezone.now()
-        gptcar_list = list(user.gptcar_list)
-        gptcar_list.append(chatgptcar.id)
-        user.gptcar_list = list(set(gptcar_list))
-        user.save()
+        from app.chatgpt.models import ChatgptCar
+        with transaction.atomic():
+            chatgptaccount_id = ChatgptAccount.save_data(res_json)
+            chatgptcar = ChatgptCar.objects.create(
+                car_name=f"reg_{data['username']}",
+                gpt_account_list=[chatgptaccount_id],
+                created_time=int(time.time()),
+                updated_time=int(time.time()),
+                remark="用户注册时，系统自动创建",
+            )
+            user = User.objects.create_user(
+                username=data["username"],
+                password=data["password"],
+                last_login=timezone.now(),
+                gptcar_list=[chatgptcar.id],
+            )
 
         token = issue_user_token(user, rotate=True)
-        return Response({"admin_token": token.key})
+        rotate_token(request)
+        response = Response({
+            "authenticated": True,
+            "is_admin": False,
+            "username": user.username,
+            "csrf_token": get_token(request),
+        })
+        set_auth_cookie(response, token)
+        return response

@@ -6,33 +6,41 @@
           管理
         </div>
         <t-menu class="nav-menu" :value="activeMenu" theme="light" @change="handleMenuChange">
-          <t-menu-item value="/account/user">
+          <t-menu-item v-if="userStore.isAdmin" value="/account/overview">
+            <template #icon><t-icon name="dashboard" /></template>
+            <span class="menu-label">运维概览</span>
+          </t-menu-item>
+          <t-menu-item v-if="userStore.isAdmin" value="/account/user">
             <template #icon><t-icon name="user" /></template>
             <span class="menu-label">用户</span>
           </t-menu-item>
-          <t-menu-item value="/account/chatgpt">
+          <t-menu-item v-if="userStore.isAdmin" value="/account/chatgpt">
             <template #icon><t-icon name="root-list" /></template>
             <span class="menu-label">上游账号</span>
           </t-menu-item>
-          <t-menu-item value="/account/gptcar">
+          <t-menu-item v-if="userStore.isAdmin" value="/account/gptcar">
             <template #icon><t-icon name="server" /></template>
             <span class="menu-label">账号池</span>
           </t-menu-item>
-          <t-menu-item value="/account/logs">
+          <t-menu-item v-if="userStore.isAdmin" value="/account/logs">
             <template #icon><t-icon name="file" /></template>
             <span class="menu-label">日志</span>
           </t-menu-item>
-          <t-menu-item value="/account/proxy">
+          <t-menu-item v-if="userStore.isAdmin" value="/account/proxy">
             <template #icon><t-icon name="internet" /></template>
             <span class="menu-label">代理</span>
           </t-menu-item>
-          <t-menu-item value="/account/scripts">
+          <t-menu-item v-if="userStore.isAdmin" value="/account/scripts">
             <template #icon><t-icon name="code" /></template>
             <span class="menu-label">脚本</span>
           </t-menu-item>
-          <t-menu-item value="/account/access">
+          <t-menu-item v-if="userStore.isAdmin" value="/account/access">
             <template #icon><t-icon name="secured" /></template>
             <span class="menu-label">访问与安全</span>
+          </t-menu-item>
+          <t-menu-item value="/account/profile">
+            <template #icon><t-icon name="user-circle" /></template>
+            <span class="menu-label">账户中心</span>
           </t-menu-item>
         </t-menu>
       </t-aside>
@@ -73,6 +81,7 @@ const username = computed(() => userStore.username || '管理员')
 const pageTitle = computed(() => String(route.meta.title || '管理'))
 
 const userOptions = [
+  { content: '账户中心', value: 'profile' },
   { content: '退出登录', value: 'logout' }
 ]
 
@@ -81,6 +90,10 @@ const handleMenuChange = (value: string) => {
 }
 
 const handleUserAction = (data: { value: string }) => {
+  if (data.value === 'profile') {
+    router.push('/account/profile')
+    return
+  }
   if (data.value === 'logout') {
     userStore.logout()
     router.push('/login')
