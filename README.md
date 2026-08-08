@@ -87,12 +87,11 @@ chatgpt-mirror/
 - Django 安全密钥、允许访问的域名和可信来源
 - 生产环境域名及其他部署参数
 
-请勿将真实密码、Cookie、Token 或 `.env` 文件提交到版本库。
 
 启动服务：
 
 ```bash
-docker compose up -d --build
+docker compose pull && docker compose up -d 
 ```
 
 常用命令：
