@@ -4,7 +4,7 @@ ChatGPT Mirror 是一个面向多用户场景的 ChatGPT 镜像管理项目，�
 
 项目重点关注多用户使用、共享账号隔离、移动端兼容、弱网体验和日常运维，适合个人学习、内部研究及其他获得合法授权的非商业场景。
 
-> 项目仍在持续适配上游变化。核心代理与兼容性组件属于非开源部分，本 README 不公开其内部结构和实现细节。部分公开的源代码与实际可能有出入
+> 项目仍在持续适配上游变化。核心代理与兼容性组件属于非开源部分，本 README 不公开其内部结构和实现细节。
 
 ## 目录
 
@@ -64,7 +64,8 @@ chatgpt-mirror/
 ├── frontend/                # 管理后台
 ├── imageandvideo/           # README 图片与演示视频
 ├── docker-compose.yml       # 本地部署编排
-└── vps-docker-compose.yml   # VPS 部署编排
+├── vps-docker-compose.yml   # VPS 部署编排
+└── FAQ.md                   # 常见问题
 ```
 
 > 非开源组件未在项目结构中展开。
@@ -79,21 +80,47 @@ chatgpt-mirror/
 
 ### 配置与启动
 
-根据所使用的 Compose 文件，在项目根目录创建 `.env`，补齐以下配置：
-
-- 管理员账号和强密码
-- 服务之间使用的独立随机密钥
-- Django 安全密钥、允许访问的域名和可信来源
-- 生产环境域名及其他部署参数
-
-
-启动服务：
+先在项目根目录复制示例配置：
 
 ```bash
-docker compose pull && docker compose up -d 
+cp .env.example .env
 ```
 
-常用命令：
+Docker Compose 会自动读取项目根目录的 `.env`，不需要执行 `source .env`。
+
+然后编辑 `.env`，至少替换以下示例值：
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=请替换为管理员强密码
+
+GATEWAY_ADMIN_SECRET=请替换为独立随机密钥
+DJANGO_SECRET_KEY=请替换为独立随机密钥
+CREDENTIAL_ENCRYPTION_KEY=请替换为至少32位的独立随机密钥
+
+DJANGO_ALLOW_ALL_ORIGINS=disable
+DJANGO_ALLOWED_HOSTS=example.com,django,localhost,127.0.0.1
+DJANGO_CSRF_TRUSTED_ORIGINS=https://example.com
+
+CLOUDFLARE_TURNSTILE=disable
+CLOUDFLARE_TURNSTILE_SITE_KEY=
+CLOUDFLARE_TURNSTILE_SECRET_KEY=
+```
+
+`DJANGO_ALLOW_ALL_ORIGINS` 支持以下两种模式：
+
+| 值 | 行为 | 建议用途 |
+| -- | -- | -- |
+| `disable` | 应用 `DJANGO_ALLOWED_HOSTS` 和 `DJANGO_CSRF_TRUSTED_ORIGINS` 配置 | 生产环境推荐 |
+| `enable` | 允许任意 Host、Origin 和 Referer，忽略上述两个白名单 | 仅用于确实需要动态域名的受控环境 |
+
+开启 `enable` 不会取消 CSRF token 校验，也不会自动配置浏览器 CORS。填写 `enable`、`disable` 以外的值会导致 Django 拒绝启动。
+
+请勿将真实密码、Cookie、Token 或 `.env` 文件提交到版本库。
+
+
+
+常用命令（使用 VPS 或 All-in-One 编排时，需附加与启动命令相同的 `-f <文件名>`）：
 
 ```bash
 docker compose ps
@@ -101,7 +128,6 @@ docker compose logs -f
 docker compose down
 ```
 
-默认站点入口为 `http://localhost:40002/`，管理后台为 `http://localhost:40002/admin/`。
 
 
 ## 管理后台
@@ -118,6 +144,7 @@ docker compose down
 | 脚本管理 | 维护站点所需的自定义脚本配置 |
 | 访问限制 | 配置不允许镜像用户访问的页面或功能范围 |
 
+更多使用与排障说明见 [FAQ](./FAQ.md)。
 
 ## 安全与使用边界
 
@@ -137,8 +164,7 @@ docker compose down
 ### 2026-08
 
 - 针对 iPhone Safari 和 iPhone Chrome 偶发请求失败、页面资源解析警告等现象进行兼容性调整。
-- 保持桌面端原有访问行为不变，没有通过强制修改浏览器身份来规避问题。
-- 解决最新的 map 页面的地图加载不出来的问题
+- 保持桌面端原有访问行为不变.
 
 ### 2026-07
 
@@ -154,5 +180,3 @@ docker compose down
 
 ### 2026-05 及以前
 - 开发
-
-
