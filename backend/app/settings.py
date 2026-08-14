@@ -54,11 +54,22 @@ SECRET_KEY = (
     )
 )
 
-ALLOWED_HOSTS = env_list(
-    "DJANGO_ALLOWED_HOSTS",
-    "django,localhost,127.0.0.1" if DJANGO_ENV == "PRODUCTION" else "*",
-)
-CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+DJANGO_ALLOW_ALL_ORIGINS_MODE = os.environ.get(
+    "DJANGO_ALLOW_ALL_ORIGINS", "disable"
+).strip().lower()
+if DJANGO_ALLOW_ALL_ORIGINS_MODE not in {"enable", "disable"}:
+    raise RuntimeError("DJANGO_ALLOW_ALL_ORIGINS must be enable or disable")
+DJANGO_ALLOW_ALL_ORIGINS = DJANGO_ALLOW_ALL_ORIGINS_MODE == "enable"
+
+if DJANGO_ALLOW_ALL_ORIGINS:
+    ALLOWED_HOSTS = ["*"]
+    CSRF_TRUSTED_ORIGINS = []
+else:
+    ALLOWED_HOSTS = env_list(
+        "DJANGO_ALLOWED_HOSTS",
+        "django,localhost,127.0.0.1" if DJANGO_ENV == "PRODUCTION" else "*",
+    )
+    CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", DJANGO_ENV == "PRODUCTION")
@@ -168,7 +179,7 @@ MIDDLEWARE = [
     "app.security.NoStoreApiMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    "app.security.ConfigurableCsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",

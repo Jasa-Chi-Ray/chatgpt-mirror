@@ -1,17 +1,18 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.middleware.csrf import CsrfViewMiddleware
 from django.utils import timezone
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authentication import get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 
+from app.security import ConfigurableCsrfViewMiddleware
+
 
 AUTH_COOKIE_NAME = "mirror_api_session"
 
 
-class _CsrfCheck(CsrfViewMiddleware):
+class _CsrfCheck(ConfigurableCsrfViewMiddleware):
     def _reject(self, request, reason):
         return reason
 

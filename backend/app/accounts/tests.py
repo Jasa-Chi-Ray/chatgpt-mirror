@@ -145,6 +145,44 @@ class SecurityRegressionTests(TestCase):
         )
         self.assertNotEqual(response.status_code, 403)
 
+        untrusted = client.post(
+            "/0x/user/",
+            {},
+            format="json",
+            HTTP_X_CSRFTOKEN=me.data["csrf_token"],
+            HTTP_ORIGIN="https://untrusted.example",
+            HTTP_REFERER="https://untrusted.example/admin/",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(untrusted.status_code, 403)
+
+    @override_settings(DJANGO_ALLOW_ALL_ORIGINS=True, ALLOWED_HOSTS=["*"])
+    @patch("app.accounts.views.login.TURNSTILE_ENABLED", False)
+    def test_allow_all_origins_accepts_unlisted_origin_with_csrf_token(self):
+        User.objects.create_superuser(username="open-origin-admin", password="Strong-password-123!")
+        client = APIClient(enforce_csrf_checks=True)
+
+        login = client.post(
+            "/0x/user/login",
+            {"username": "open-origin-admin", "password": "Strong-password-123!"},
+            format="json",
+            HTTP_USER_AGENT="security-regression-test",
+            HTTP_ORIGIN="https://unlisted.example",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(login.status_code, 200)
+
+        response = client.post(
+            "/0x/user/",
+            {},
+            format="json",
+            HTTP_X_CSRFTOKEN=login.data["csrf_token"],
+            HTTP_ORIGIN="https://another-unlisted.example",
+            HTTP_REFERER="https://another-unlisted.example/admin/",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertNotEqual(response.status_code, 403)
+
     @patch("app.accounts.views.login.save_visit_log")
     def test_free_login_keeps_shared_token_but_rotates_visitor_subject(self, _save_visit_log):
         User.objects.create_user(username=FREE_ACCOUNT_USERNAME, password="password-123")
