@@ -40,12 +40,8 @@
             {{ row.plan_type }}
           </t-tag>
         </template>
-        <template #use_count="{ row }">
-          <t-space size="small">
-            <span>1h: {{ row.use_count?.last_1h || 0 }}</span>
-            <span>2h: {{ row.use_count?.last_2h || 0 }}</span>
-            <span>3h: {{ row.use_count?.last_3h || 0 }}</span>
-          </t-space>
+        <template #login_count="{ row }">
+          <span>{{ row.login_count || 0 }} 次</span>
         </template>
         <template #access_token_valid="{ row }">
           <t-tag :theme="row.access_token_valid ? 'success' : 'danger'">
@@ -100,6 +96,9 @@
               刷新Token
             </t-link>
             <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
+            <t-popconfirm content="确定重置该账号的被登录次数吗？" @confirm="handleResetLoginCount(row)">
+              <t-link theme="warning">重置次数</t-link>
+            </t-popconfirm>
             <t-popconfirm content="确定删除该账号吗？" @confirm="handleDelete(row)">
               <t-link theme="danger">删除</t-link>
             </t-popconfirm>
@@ -232,13 +231,13 @@ const columns = [
   { colKey: 'access_token_valid', title: 'AccessToken', cell: 'access_token_valid', width: 110 },
   { colKey: 'session_token_valid', title: 'SessionToken', cell: 'session_token_valid', width: 120 },
   { colKey: 'supported_login_modes', title: '支持模式', cell: 'supported_login_modes', width: 160 },
-  { colKey: 'use_count', title: '使用次数', cell: 'use_count', width: 200 },
+  { colKey: 'login_count', title: '被登录次数', cell: 'login_count', width: 120 },
   { colKey: 'proxy_node_id', title: '代理节点', cell: 'proxy_node_id', width: 110 },
   { colKey: 'token_remaining', title: 'Token剩余', cell: 'token_remaining', width: 130 },
   { colKey: 'last_check_at', title: '最近诊断', cell: 'last_check_at', width: 160 },
   { colKey: 'last_error', title: '诊断结果', cell: 'last_error', ellipsis: true },
   { colKey: 'remark', title: '备注', ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 260 }
+  { colKey: 'op', title: '操作', cell: 'op', width: 340 }
 ]
 
 const addFormData = reactive({
@@ -518,6 +517,14 @@ const handleDelete = async (row: any) => {
   if (data) {
     MessagePlugin.success('删除成功')
     fetchData()
+  }
+}
+
+const handleResetLoginCount = async (row: any) => {
+  const data = await request('/0x/chatgpt/reset-login-count', 'POST', { id: row.id })
+  if (data) {
+    row.login_count = 0
+    MessagePlugin.success(data.message || '被登录次数已重置')
   }
 }
 </script>

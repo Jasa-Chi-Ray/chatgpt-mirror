@@ -51,8 +51,22 @@
             {{ row.force_chat_mode !== false ? '自动切回' : '允许 Work' }}
           </t-tag>
         </template>
+        <template #model_message_counts="{ row }">
+          <t-space v-if="Object.keys(row.model_message_counts || {}).length" size="small" break-line>
+            <t-tag
+              v-for="([model, count]) in Object.entries(row.model_message_counts || {}).slice(0, 2)"
+              :key="model"
+              size="small"
+              variant="light"
+            >
+              {{ model }}: {{ count }}
+            </t-tag>
+          </t-space>
+          <span v-else class="text-gray">暂无</span>
+        </template>
         <template #op="{ row }">
           <t-space>
+            <t-link theme="primary" @click="showStatisticsDialog(row)">对话统计</t-link>
             <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
             <t-popconfirm content="确定删除该用户吗？" @confirm="handleDelete(row)">
               <t-link theme="danger">删除</t-link>
@@ -119,11 +133,63 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <t-dialog
+      :visible="statisticsDialogVisible"
+      :header="`${statisticsUser.username || ''} 的对话统计`"
+      :confirm-btn="null"
+      width="860px"
+      @close="statisticsDialogVisible = false"
+    >
+      <t-loading :loading="statisticsLoading">
+        <div class="statistics-summary">
+          <div class="statistics-card">
+            <span>创建对话</span>
+            <strong>{{ statisticsData.conversation_count }} 条</strong>
+          </div>
+          <div class="statistics-card">
+            <span>发送消息</span>
+            <strong>{{ statisticsData.message_count }} 条</strong>
+          </div>
+        </div>
+
+        <div class="statistics-section">
+          <div class="statistics-section__title">模型消息数</div>
+          <t-space v-if="modelStatisticsRows.length" break-line>
+            <t-tag v-for="item in modelStatisticsRows" :key="item.model" variant="light">
+              {{ item.model }}：{{ item.count }} 条
+            </t-tag>
+          </t-space>
+          <t-empty v-else description="暂无模型消息统计" />
+        </div>
+
+        <div class="statistics-section">
+          <div class="statistics-section__head">
+            <div class="statistics-section__title">对话列表</div>
+            <t-popconfirm content="确定重置该用户的全部对话统计吗？不会删除实际对话。" @confirm="resetStatistics">
+              <t-button size="small" theme="warning" variant="outline">重置统计</t-button>
+            </t-popconfirm>
+          </div>
+          <t-alert
+            v-if="!statisticsData.title_visible"
+            theme="info"
+            message="该用户未允许管理员查看对话标题，以下仅显示官网对话路径中的 UUID。"
+          />
+          <div v-if="statisticsData.conversations.length" class="conversation-stat-list">
+            <div v-for="item in statisticsData.conversations" :key="item.conversation_id" class="conversation-stat-row">
+              <div class="conversation-stat-title">{{ item.display_title }}</div>
+              <div class="conversation-stat-meta">{{ item.message_count }} 条消息</div>
+            </div>
+          </div>
+          <t-empty v-else description="暂无对话统计" />
+        </div>
+      </t-loading>
+    </t-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
 
@@ -138,6 +204,25 @@ const modelLimitInput = ref('')
 const query = ref('')
 const statusFilter = ref('')
 const selectedRowKeys = ref<Array<number | string>>([])
+const statisticsDialogVisible = ref(false)
+const statisticsLoading = ref(false)
+const statisticsUser = reactive({ id: 0, username: '' })
+const statisticsData = reactive({
+  conversation_count: 0,
+  message_count: 0,
+  model_message_counts: {} as Record<string, number>,
+  conversations: [] as Array<{
+    conversation_id: string
+    display_title: string
+    message_count: number
+  }>,
+  title_visible: false,
+})
+const modelStatisticsRows = computed(() =>
+  Object.entries(statisticsData.model_message_counts)
+    .map(([model, count]) => ({ model, count: Number(count) || 0 }))
+    .sort((a, b) => b.count - a.count),
+)
 
 const pagination = reactive({
   current: 1,
@@ -153,8 +238,11 @@ const columns = [
   { colKey: 'model_limit', title: '模型限制', cell: 'model_limit', width: 180 },
   { colKey: 'force_chat_mode', title: 'Work 模式', cell: 'force_chat_mode', width: 110 },
   { colKey: 'expired_date', title: '过期日期', cell: 'expired_date', width: 120 },
+  { colKey: 'conversation_count', title: '对话数', width: 90 },
+  { colKey: 'message_count', title: '消息数', width: 90 },
+  { colKey: 'model_message_counts', title: '模型消息', cell: 'model_message_counts', width: 230 },
   { colKey: 'remark', title: '备注', ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 150 }
+  { colKey: 'op', title: '操作', cell: 'op', width: 220 }
 ]
 
 const formData = reactive({
@@ -301,6 +389,39 @@ const handleDelete = async (row: any) => {
   }
 }
 
+const loadStatistics = async () => {
+  statisticsLoading.value = true
+  const data = await request(`/0x/user/conversation-statistics/${statisticsUser.id}`)
+  statisticsLoading.value = false
+  if (!data) return
+  Object.assign(statisticsData, {
+    conversation_count: Number(data.conversation_count || 0),
+    message_count: Number(data.message_count || 0),
+    model_message_counts: data.model_message_counts || {},
+    conversations: data.conversations || [],
+    title_visible: Boolean(data.title_visible),
+  })
+}
+
+const showStatisticsDialog = async (row: any) => {
+  statisticsUser.id = Number(row.id)
+  statisticsUser.username = row.username
+  statisticsDialogVisible.value = true
+  await loadStatistics()
+}
+
+const resetStatistics = async () => {
+  const data = await request(
+    `/0x/user/conversation-statistics/${statisticsUser.id}`,
+    'DELETE',
+  )
+  if (data) {
+    MessagePlugin.success(data.message || '对话统计已重置')
+    await loadStatistics()
+    await fetchData()
+  }
+}
+
 const applyFilters = () => {
   pagination.current = 1
   fetchData()
@@ -327,6 +448,91 @@ const batchAction = async (action: 'activate' | 'deactivate') => {
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.statistics-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.statistics-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-muted);
+}
+
+.statistics-card span,
+.conversation-stat-meta {
+  color: var(--app-text-muted);
+  font-size: 13px;
+}
+
+.statistics-card strong {
+  color: var(--app-text);
+  font-size: 18px;
+}
+
+.statistics-section + .statistics-section {
+  margin-top: 22px;
+}
+
+.statistics-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.statistics-section__title {
+  margin-bottom: 10px;
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.statistics-section__head .statistics-section__title {
+  margin-bottom: 0;
+}
+
+.conversation-stat-list {
+  max-height: 320px;
+  margin-top: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+}
+
+.conversation-stat-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.conversation-stat-row + .conversation-stat-row {
+  border-top: 1px solid var(--app-border);
+}
+
+.conversation-stat-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .statistics-summary {
+    grid-template-columns: 1fr;
+  }
 }
 .table-toolbar {
   display: grid;

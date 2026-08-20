@@ -9,10 +9,16 @@ from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
-from app.accounts.models import User, VisitLog
-from app.accounts.views import VisitLogView, ChangePasswordView
+from app.accounts.models import Announcement, User, VisitLog
+from app.accounts.views import (
+    VisitLogView,
+    ChangePasswordView,
+    ConversationTitlePrivacyView,
+    UserConversationStatisticsView,
+)
 from app.accounts.authentication import AUTH_COOKIE_NAME, ExpiringCookieTokenAuthentication
 from app.accounts.views.cfg import AccessControlView
+from app.accounts.views.announcements import AnnouncementAdminView, CurrentAnnouncementView
 from app.accounts.views.login import (
     AccountLogin,
     AccountLogout,
@@ -20,8 +26,9 @@ from app.accounts.views.login import (
     UserFreeLoginView,
     verify_turnstile,
 )
-from app.chatgpt.models import ChatgptAccount
+from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.chatgpt.serializers import ShowChatgptTokenSerializer
+from app.chatgpt.views.chatgpt import ChatGPTLoginView, ChatGPTLoginCountResetView
 from app.settings import ADMIN_USERNAME, FREE_ACCOUNT_USERNAME
 from app.utils import get_client_ip
 
@@ -253,7 +260,10 @@ class SecurityRegressionTests(TestCase):
         )
         force_authenticate(request, user=user, token=old_token)
         response = ChangePasswordView.as_view()(request)
+        user.refresh_from_db()
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(user.check_password("New-strong-password-456!"))
+        self.assertFalse(user.check_password("Old-strong-password-123!"))
         self.assertFalse(Token.objects.filter(key=old_token.key).exists())
         self.assertTrue(response.cookies[AUTH_COOKIE_NAME]["httponly"])
 
@@ -299,6 +309,104 @@ class SecurityRegressionTests(TestCase):
             "extra_cookies",
         ):
             self.assertNotIn(field, data)
+
+    @patch("app.chatgpt.views.chatgpt.req_gateway", return_value={"login_url": "/handoff"})
+    def test_successful_gateway_login_increments_upstream_login_count(self, _req_gateway):
+        account = ChatgptAccount.objects.create(
+            chatgpt_username="login-count@example.com",
+            plan_type="plus",
+            access_token="secret-access",
+            access_token_valid=True,
+            login_count=3,
+            created_time=1,
+            updated_time=1,
+        )
+        car = ChatgptCar.objects.create(
+            car_name="login-count-car",
+            gpt_account_list=[account.id],
+            created_time=1,
+            updated_time=1,
+        )
+        user = User.objects.create_user(
+            username="login-count-user",
+            password="Strong-password-123!",
+            gptcar_list=[car.id],
+        )
+        request = self.factory.post(
+            "/0x/chatgpt/login",
+            {"chatgpt_id": account.id, "login_mode": "api"},
+            format="json",
+            HTTP_USER_AGENT="test-browser",
+        )
+        force_authenticate(request, user=user)
+        response = ChatGPTLoginView.as_view()(request)
+        account.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(account.login_count, 4)
+
+    def test_admin_can_reset_upstream_login_count(self):
+        admin = User.objects.create_superuser(
+            username="login-count-admin",
+            password="Strong-password-123!",
+        )
+        account = ChatgptAccount.objects.create(
+            chatgpt_username="reset-count@example.com",
+            plan_type="plus",
+            access_token="secret-access",
+            login_count=9,
+            created_time=1,
+            updated_time=1,
+        )
+        request = self.factory.post(
+            "/0x/chatgpt/reset-login-count",
+            {"id": account.id},
+            format="json",
+        )
+        force_authenticate(request, user=admin)
+        response = ChatGPTLoginCountResetView.as_view()(request)
+        account.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(account.login_count, 0)
+
+    def test_user_controls_title_visibility_and_admin_receives_no_hidden_title(self):
+        admin = User.objects.create_superuser(
+            username="statistics-admin",
+            password="Strong-password-123!",
+        )
+        user = User.objects.create_user(
+            username="statistics-user",
+            password="Strong-password-123!",
+        )
+        privacy_request = self.factory.post(
+            "/0x/user/conversation-title-privacy",
+            {"allow_admin_view_conversation_titles": False},
+            format="json",
+        )
+        force_authenticate(privacy_request, user=user)
+        privacy_response = ConversationTitlePrivacyView.as_view()(privacy_request)
+        self.assertEqual(privacy_response.status_code, 200)
+
+        with patch("app.accounts.views.req_gateway", return_value={
+            "conversation_count": 1,
+            "message_count": 2,
+            "model_message_counts": {"gpt-5": 2},
+            "conversations": [{
+                "conversation_id": "uuid-from-official-path",
+                "title": "管理员不应收到此标题",
+                "message_count": 2,
+            }],
+        }):
+            request = self.factory.get(
+                f"/0x/user/conversation-statistics/{user.id}"
+            )
+            force_authenticate(request, user=admin)
+            response = UserConversationStatisticsView.as_view()(request, user_id=user.id)
+        self.assertFalse(response.data["title_visible"])
+        self.assertEqual(
+            response.data["conversations"][0]["display_title"],
+            "uuid-from-official-path",
+        )
+        self.assertNotIn("title", response.data["conversations"][0])
 
     def test_clear_visit_logs_preserves_admin_login_logs(self):
         admin = User.objects.create_superuser(username="log-admin", password="password-123")
@@ -374,3 +482,153 @@ class SecurityRegressionTests(TestCase):
 
         with self.assertRaises(ValidationError):
             verify_turnstile(request, "login")
+
+
+class AnnouncementTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.admin = User.objects.create_superuser(
+            username="announcement-admin",
+            password="Strong-password-123!",
+        )
+        self.user = User.objects.create_user(
+            username="announcement-user",
+            password="Strong-password-123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="announcement-other",
+            password="Strong-password-123!",
+        )
+
+    def test_admin_can_publish_global_and_personal_announcements(self):
+        global_request = self.factory.post(
+            "/0x/user/announcements",
+            {
+                "title": "全局通知",
+                "content": "所有用户都可以看到",
+                "scope": "global",
+                "is_active": True,
+            },
+            format="json",
+        )
+        force_authenticate(global_request, user=self.admin)
+        global_response = AnnouncementAdminView.as_view()(global_request)
+
+        personal_request = self.factory.post(
+            "/0x/user/announcements",
+            {
+                "title": "个人通知",
+                "content": "只有目标用户可以看到",
+                "scope": "personal",
+                "target_user_id": self.user.id,
+                "is_active": True,
+            },
+            format="json",
+        )
+        force_authenticate(personal_request, user=self.admin)
+        personal_response = AnnouncementAdminView.as_view()(personal_request)
+
+        self.assertEqual(global_response.status_code, 201)
+        self.assertEqual(personal_response.status_code, 201)
+        self.assertIsNone(Announcement.objects.get(id=global_response.data["id"]).target_user)
+        self.assertEqual(
+            Announcement.objects.get(id=personal_response.data["id"]).target_user,
+            self.user,
+        )
+
+    def test_current_announcements_only_include_global_and_current_user(self):
+        global_announcement = Announcement.objects.create(
+            title="全局通知",
+            content="全局内容",
+            scope=Announcement.SCOPE_GLOBAL,
+            created_by=self.admin,
+        )
+        own_announcement = Announcement.objects.create(
+            title="你的通知",
+            content="个人内容",
+            scope=Announcement.SCOPE_PERSONAL,
+            target_user=self.user,
+            created_by=self.admin,
+        )
+        Announcement.objects.create(
+            title="其他人的通知",
+            content="不应返回",
+            scope=Announcement.SCOPE_PERSONAL,
+            target_user=self.other_user,
+            created_by=self.admin,
+        )
+        Announcement.objects.create(
+            title="停用通知",
+            content="不应返回",
+            scope=Announcement.SCOPE_GLOBAL,
+            is_active=False,
+            created_by=self.admin,
+        )
+
+        request = self.factory.get("/0x/user/announcements/current")
+        force_authenticate(request, user=self.user)
+        response = CurrentAnnouncementView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item["id"] for item in response.data["global"]],
+            [global_announcement.id],
+        )
+        self.assertEqual(
+            [item["id"] for item in response.data["personal"]],
+            [own_announcement.id],
+        )
+
+    def test_normal_user_cannot_manage_announcements(self):
+        request = self.factory.get("/0x/user/announcements")
+        force_authenticate(request, user=self.user)
+        response = AnnouncementAdminView.as_view()(request)
+        self.assertEqual(response.status_code, 403)
+
+    def test_schedule_history_and_admin_login_visibility(self):
+        now = timezone.now()
+        history = Announcement.objects.create(
+            title="已结束公告",
+            content="历史内容",
+            scope=Announcement.SCOPE_GLOBAL,
+            start_at=now - timedelta(days=2),
+            end_at=now - timedelta(days=1),
+            display_timezone="Asia/Shanghai",
+            created_by=self.admin,
+        )
+        Announcement.objects.create(
+            title="待发布公告",
+            content="未来内容",
+            scope=Announcement.SCOPE_GLOBAL,
+            start_at=now + timedelta(days=1),
+            created_by=self.admin,
+        )
+
+        user_request = self.factory.get("/0x/user/announcements/current")
+        force_authenticate(user_request, user=self.user)
+        user_response = CurrentAnnouncementView.as_view()(user_request)
+        self.assertEqual([item["id"] for item in user_response.data["history"]], [history.id])
+        self.assertFalse(user_response.data["global"])
+
+        admin_request = self.factory.get("/0x/user/announcements/current")
+        force_authenticate(admin_request, user=self.admin)
+        admin_response = CurrentAnnouncementView.as_view()(admin_request)
+        self.assertEqual(admin_response.data, {"global": [], "personal": [], "history": []})
+
+    def test_announcement_end_time_must_be_after_start_time(self):
+        now = timezone.now()
+        request = self.factory.post(
+            "/0x/user/announcements",
+            {
+                "title": "错误时间",
+                "content": "内容",
+                "scope": "global",
+                "start_at": now.isoformat(),
+                "end_at": (now - timedelta(minutes=1)).isoformat(),
+                "display_timezone": "Asia/Shanghai",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.admin)
+        response = AnnouncementAdminView.as_view()(request)
+        self.assertEqual(response.status_code, 400)

@@ -26,6 +26,10 @@
             <template #icon><t-icon name="file" /></template>
             <span class="menu-label">日志</span>
           </t-menu-item>
+          <t-menu-item v-if="userStore.isAdmin" value="/account/announcements">
+            <template #icon><t-icon name="notification" /></template>
+            <span class="menu-label">公告</span>
+          </t-menu-item>
           <t-menu-item v-if="userStore.isAdmin" value="/account/proxy">
             <template #icon><t-icon name="internet" /></template>
             <span class="menu-label">代理</span>
@@ -37,6 +41,10 @@
           <t-menu-item v-if="userStore.isAdmin" value="/account/access">
             <template #icon><t-icon name="secured" /></template>
             <span class="menu-label">访问与安全</span>
+          </t-menu-item>
+          <t-menu-item v-if="userStore.isAdmin" value="/account/political-moderation">
+            <template #icon><t-icon name="secured" /></template>
+            <span class="menu-label">政治内容屏蔽</span>
           </t-menu-item>
           <t-menu-item value="/account/profile">
             <template #icon><t-icon name="user-circle" /></template>

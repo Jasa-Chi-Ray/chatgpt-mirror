@@ -72,6 +72,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '日志', requiresAdmin: true }
       },
       {
+        path: 'announcements',
+        name: 'Announcements',
+        component: () => import('@/pages/account/announcement.vue'),
+        meta: { title: '公告', requiresAdmin: true }
+      },
+      {
         path: 'proxy',
         name: 'Proxy',
         component: () => import('@/pages/account/proxy.vue'),
@@ -88,6 +94,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AccessControl',
         component: () => import('@/pages/account/access.vue'),
         meta: { title: '访问与安全', requiresAdmin: true }
+      },
+      {
+        path: 'political-moderation',
+        name: 'PoliticalModeration',
+        component: () => import('@/pages/account/political-moderation.vue'),
+        meta: { title: '政治敏感内容屏蔽', requiresAdmin: true }
       },
       {
         path: 'profile',

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div v-if="!tableVisible" class="login-chatgpt-state">
+    <div v-if="!tableVisible && !announcementVisible" class="login-chatgpt-state">
       <t-loading :loading="tableLoading" size="medium">
         <div class="login-chatgpt-card">
           <div class="login-chatgpt-title">正在准备 ChatGPT 会话</div>
@@ -8,6 +8,65 @@
         </div>
       </t-loading>
     </div>
+    <t-dialog
+      :visible="announcementVisible"
+      header="登录公告"
+      :cancel-btn="null"
+      :close-btn="false"
+      :close-on-overlay-click="false"
+      :confirm-btn="{ content: '继续选择账号', loading: tableLoading }"
+      width="760px"
+      @confirm="continueToAccountSelection"
+    >
+      <div class="announcement-intro">请阅读管理员发布的公告，确认后继续选择 ChatGPT 账号。</div>
+      <t-tabs v-model="activeAnnouncementTab" class="announcement-tabs">
+        <t-tab-panel
+          v-if="announcements.global.length"
+          value="global"
+          :label="`全局公告 (${announcements.global.length})`"
+        >
+          <div class="announcement-list">
+            <article v-for="item in announcements.global" :key="item.id" class="announcement-item">
+              <div class="announcement-heading">
+                <h2>{{ item.title }}</h2>
+                <time>{{ formatAnnouncementSchedule(item) }}</time>
+              </div>
+              <MarkdownContent class="announcement-content" :content="item.content" />
+            </article>
+          </div>
+        </t-tab-panel>
+        <t-tab-panel
+          v-if="announcements.personal.length"
+          value="personal"
+          :label="`给你的公告 (${announcements.personal.length})`"
+        >
+          <div class="announcement-list">
+            <article v-for="item in announcements.personal" :key="item.id" class="announcement-item">
+              <div class="announcement-heading">
+                <h2>{{ item.title }}</h2>
+                <time>{{ formatAnnouncementSchedule(item) }}</time>
+              </div>
+              <MarkdownContent class="announcement-content" :content="item.content" />
+            </article>
+          </div>
+        </t-tab-panel>
+        <t-tab-panel
+          v-if="announcements.history.length"
+          value="history"
+          :label="`历史公告 (${announcements.history.length})`"
+        >
+          <div class="announcement-list">
+            <article v-for="item in announcements.history" :key="item.id" class="announcement-item announcement-item--history">
+              <div class="announcement-heading">
+                <h2>{{ item.title }}</h2>
+                <time>{{ formatAnnouncementSchedule(item) }}</time>
+              </div>
+              <MarkdownContent class="announcement-content" :content="item.content" />
+            </article>
+          </div>
+        </t-tab-panel>
+      </t-tabs>
+    </t-dialog>
     <t-dialog
       :visible="tableVisible"
       header="请选择 ChatGPT 账号"
@@ -18,6 +77,10 @@
     >
       <t-loading :loading="tableLoading">
         <t-space direction="vertical" style="width: 100%; margin-bottom: 16px" :size="12">
+          <t-alert
+            theme="warning"
+            message="管理员有权记录您的对话数量及模型消息统计，但不会记录对话正文。管理员查看不含正文的对话标题权限默认关闭，您可在账户中心主动授权。"
+          />
           <div class="mode-switch">
             <span class="mode-switch__label">登录模式</span>
             <t-radio-group v-model="selectedMode" variant="default-filled">
@@ -75,29 +138,8 @@
                 </div>
 
                 <div style="font-size: 12px; display: flex; justify-content: space-between">
-                  <div>实时状态</div>
-                  <div>
-                    <span v-if="item.auth_status === false">已过期</span>
-                    <span v-else-if="getGPTUsePercent(item) < 40">空闲</span>
-                    <span v-else-if="getGPTUsePercent(item) < 80">忙碌</span>
-                    <span v-else>繁忙 | 可用</span>
-                  </div>
-                </div>
-
-                <div>
-                  <t-progress
-                    v-if="getGPTUsePercent(item) < 40"
-                    :percentage="getGPTUsePercent(item)"
-                    status="success"
-                    :label="false"
-                  />
-                  <t-progress
-                    v-else-if="getGPTUsePercent(item) < 80"
-                    :percentage="getGPTUsePercent(item)"
-                    status="warning"
-                    :label="false"
-                  />
-                  <t-progress v-else :percentage="getGPTUsePercent(item)" status="error" :label="false" />
+                  <div>被登录次数</div>
+                  <div>{{ item.login_count || 0 }} 次</div>
                 </div>
               </t-space>
             </div>
@@ -110,9 +152,10 @@
 
 <script setup lang="ts">
 import { MessagePlugin } from 'tdesign-vue-next'
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/api/request'
+import MarkdownContent from '@/components/MarkdownContent.vue'
 import { useUserStore } from '@/store/user'
 
 const tableLoading = ref(false)
@@ -120,14 +163,36 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const tableVisible = ref(false)
+const announcementVisible = ref(false)
+const activeAnnouncementTab = ref<'global' | 'personal' | 'history'>('global')
 const statusText = ref('正在加载可用账号...')
+
+type Announcement = {
+  id: number
+  title: string
+  content: string
+  updated_at: string
+  start_at: string
+  end_at: string | null
+  display_timezone: string
+}
+
+const announcements = reactive<{
+  global: Announcement[]
+  personal: Announcement[]
+  history: Announcement[]
+}>({
+  global: [],
+  personal: [],
+  history: [],
+})
 
 interface TableData {
   id: number
   chatgpt_flag: string
   plan_type: string
   auth_status: boolean
-  use_count: number
+  login_count: number
   access_token_valid: boolean
   session_token_valid: boolean
   supported_login_modes: string[]
@@ -143,12 +208,44 @@ onMounted(async () => {
   }
   preferredMode.value = route.query.mode === 'web' ? 'web' : 'api'
   selectedMode.value = preferredMode.value
-  await getUserChatGPTAccountList()
+  await prepareAnnouncements()
 })
 
-const getGPTUsePercent = (item: TableData) => {
-  const MaxLimitCount = item.plan_type === 'free' ? 80 : 320
-  return Math.min((item.use_count / MaxLimitCount) * 100 + 1, 99)
+const prepareAnnouncements = async () => {
+  if (userStore.isAdmin) {
+    await getUserChatGPTAccountList()
+    return
+  }
+  statusText.value = '正在加载公告...'
+  const data = await request('/0x/user/announcements/current')
+  announcements.global = data?.global || []
+  announcements.personal = data?.personal || []
+  announcements.history = data?.history || []
+
+  if (announcements.global.length || announcements.personal.length || announcements.history.length) {
+    activeAnnouncementTab.value = announcements.global.length
+      ? 'global'
+      : announcements.personal.length ? 'personal' : 'history'
+    announcementVisible.value = true
+    statusText.value = '请先阅读登录公告'
+    return
+  }
+
+  await getUserChatGPTAccountList()
+}
+
+const continueToAccountSelection = async () => {
+  announcementVisible.value = false
+  await getUserChatGPTAccountList()
+}
+
+const formatAnnouncementSchedule = (item: Announcement) => {
+  const timeZone = item.display_timezone || 'Asia/Shanghai'
+  const start = new Date(item.start_at).toLocaleString('zh-CN', { hour12: false, timeZone })
+  const end = item.end_at
+    ? new Date(item.end_at).toLocaleString('zh-CN', { hour12: false, timeZone })
+    : '长期'
+  return `${start} 至 ${end} · ${timeZone}`
 }
 
 const getUserChatGPTAccountList = async () => {
@@ -271,6 +368,56 @@ const onSelect = async (chatgptId: number | null) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.announcement-intro {
+  margin-bottom: 16px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.announcement-tabs {
+  min-height: 280px;
+}
+
+.announcement-list {
+  display: grid;
+  gap: 12px;
+  max-height: 52vh;
+  padding: 16px 2px 4px;
+  overflow-y: auto;
+}
+
+.announcement-item {
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fafaf9;
+}
+
+.announcement-heading {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.announcement-heading h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.announcement-heading time {
+  flex: 0 0 auto;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.announcement-content {
+  margin-top: 12px;
 }
 
 .mode-switch__label {

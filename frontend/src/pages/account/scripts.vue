@@ -47,10 +47,23 @@
               <t-textarea
                 v-model="script.content"
                 :autosize="{ minRows: 8, maxRows: 18 }"
-                placeholder="CSS 会自动包裹 style；JavaScript、Vue、Next.js、TypeScript 会按 module script 注入；HTML 会原样注入。"
+                placeholder="CSS 会自动包裹 style；JavaScript 会自动包裹 script。"
               />
             </t-form-item>
           </div>
+        </div>
+
+        <div class="trusted-cdn-panel">
+          <div class="trusted-cdn-title">可信 CDN 源</div>
+          <div class="trusted-cdn-desc">
+            每行一个来源。保存后会自动加入 Gateway 页面可信域名列表，仅接受以下格式：
+            <code>https://example.com/*</code>
+          </div>
+          <t-textarea
+            v-model="trustedCdnInput"
+            :autosize="{ minRows: 4, maxRows: 10 }"
+            placeholder="https://example.com/*"
+          />
         </div>
 
         <t-form-item>
@@ -83,13 +96,17 @@ type ScriptForm = {
 
 const loading = ref(false)
 const saving = ref(false)
+const trustedCdnInput = ref('')
 let nextLocalKey = 1
 
 const formData = reactive<{ scripts: ScriptForm[] }>({
   scripts: []
 })
 
-const languageOptions = [{ label: 'CSS', value: 'css' }]
+const languageOptions = [
+  { label: 'CSS', value: 'css' },
+  { label: 'JavaScript', value: 'javascript' },
+]
 
 const positionOptions = [
   { label: 'head 开始', value: 'head_start' },
@@ -112,7 +129,7 @@ const createScript = (data: any = {}): ScriptForm => ({
   id: Number(data.id) || nextScriptId(),
   enabled: Boolean(data.enabled),
   name: data.name || '',
-  language: 'css',
+  language: data.language === 'javascript' ? 'javascript' : 'css',
   position: data.position || 'head_end',
   content: data.content || ''
 })
@@ -124,6 +141,7 @@ const fetchConfig = async () => {
 
   if (data) {
     formData.scripts.splice(0, formData.scripts.length, ...(data.scripts || []).map(createScript))
+    trustedCdnInput.value = (data.trusted_cdn_sources || []).join('\n')
   }
 }
 
@@ -147,6 +165,11 @@ const serializeScripts = () => formData.scripts.map(script => ({
   content: script.content
 })).filter(script => script.id > 0)
 
+const serializeTrustedCdnSources = () => trustedCdnInput.value
+  .split(/[\n,]/)
+  .map(source => source.trim())
+  .filter(Boolean)
+
 const validateScripts = () => {
   const ids = new Set<number>()
   for (const script of serializeScripts()) {
@@ -160,6 +183,12 @@ const validateScripts = () => {
       return false
     }
   }
+  for (const source of serializeTrustedCdnSources()) {
+    if (!/^https:\/\/[^/\s]+\/\*$/.test(source)) {
+      MessagePlugin.warning(`可信 CDN 格式错误：${source}`)
+      return false
+    }
+  }
   return true
 }
 
@@ -170,12 +199,14 @@ const handleSave = async () => {
 
   saving.value = true
   const data = await request('/0x/user/custom-scripts', 'POST', {
-    scripts: serializeScripts()
+    scripts: serializeScripts(),
+    trusted_cdn_sources: serializeTrustedCdnSources(),
   })
   saving.value = false
 
   if (data) {
     formData.scripts.splice(0, formData.scripts.length, ...(data.scripts || []).map(createScript))
+    trustedCdnInput.value = (data.trusted_cdn_sources || []).join('\n')
     MessagePlugin.success('保存成功')
   }
 }
@@ -214,6 +245,34 @@ const handleSave = async () => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.trusted-cdn-panel {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+}
+
+.trusted-cdn-title {
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.trusted-cdn-desc {
+  margin: 6px 0 12px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.trusted-cdn-desc code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--app-surface-muted);
+  color: var(--app-text);
 }
 
 @media (max-width: 760px) {

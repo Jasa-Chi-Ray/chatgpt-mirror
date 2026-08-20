@@ -24,6 +24,21 @@
         </t-form-item>
       </t-form>
     </t-card>
+    <t-card title="对话标题隐私" subtitle="对话次数和模型消息统计始终可见，标题由你决定是否授权" :bordered="false">
+      <t-loading :loading="privacyLoading">
+        <div class="privacy-row">
+          <div>
+            <div class="privacy-title">允许管理员查看对话标题</div>
+            <div class="privacy-desc">默认关闭。关闭时管理员只能看到官网对话路径中的 UUID，且不能点击。</div>
+          </div>
+          <t-switch
+            v-model="allowAdminViewConversationTitles"
+            :loading="privacySaving"
+            @change="saveTitlePrivacy"
+          />
+        </div>
+      </t-loading>
+    </t-card>
   </div>
 </template>
 
@@ -35,6 +50,9 @@ import request from '@/api/request'
 const quota = ref<any>({ daily: { limit: 0, used: 0 }, monthly: { limit: 0, used: 0 } })
 const loading = ref(false)
 const saving = ref(false)
+const privacyLoading = ref(false)
+const privacySaving = ref(false)
+const allowAdminViewConversationTitles = ref(false)
 const form = reactive({ current_password: '', new_password: '' })
 const quotaItems = computed(() => [
   { label: '今日用量', ...quota.value.daily },
@@ -62,12 +80,38 @@ const changePassword = async () => {
   }
 }
 
-onMounted(loadQuota)
+const loadTitlePrivacy = async () => {
+  privacyLoading.value = true
+  const data = await request('/0x/user/me')
+  privacyLoading.value = false
+  if (data) {
+    allowAdminViewConversationTitles.value = Boolean(data.allow_admin_view_conversation_titles)
+  }
+}
+
+const saveTitlePrivacy = async () => {
+  privacySaving.value = true
+  const data = await request('/0x/user/conversation-title-privacy', 'POST', {
+    allow_admin_view_conversation_titles: allowAdminViewConversationTitles.value,
+  })
+  privacySaving.value = false
+  if (data) {
+    MessagePlugin.success(data.message)
+  }
+}
+
+onMounted(() => {
+  loadQuota()
+  loadTitlePrivacy()
+})
 </script>
 
 <style scoped>
 .profile-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
 .quota-row + .quota-row { margin-top: 24px; }
 .quota-head { display: flex; justify-content: space-between; margin-bottom: 10px; color: var(--app-text); font-size: 14px; }
+.privacy-row { display: flex; gap: 20px; align-items: center; justify-content: space-between; }
+.privacy-title { color: var(--app-text); font-size: 14px; font-weight: 600; }
+.privacy-desc { margin-top: 6px; color: var(--app-text-muted); font-size: 13px; line-height: 1.6; }
 @media (max-width: 900px) { .profile-grid { grid-template-columns: 1fr; } }
 </style>

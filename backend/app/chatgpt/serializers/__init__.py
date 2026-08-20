@@ -36,16 +36,8 @@ class DeleteChatgptCarSerializer(serializers.Serializer):
 
 class ShowChatgptTokenSerializer(serializers.ModelSerializer):
     access_token_exp = serializers.SerializerMethodField()
-    use_count = serializers.SerializerMethodField()
     supported_login_modes = serializers.SerializerMethodField()
     has_refresh_token = serializers.SerializerMethodField()
-
-    def __init__(self, *args, use_count_dict=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.use_count_dict = use_count_dict or {}
-
-    def get_use_count(self, obj):
-        return self.use_count_dict.get(obj.chatgpt_username, 0)
 
     def get_access_token_exp(self, obj):
         try:
@@ -81,7 +73,7 @@ class ShowChatgptTokenSerializer(serializers.ModelSerializer):
             "created_time",
             "updated_time",
             "access_token_exp",
-            "use_count",
+            "login_count",
             "supported_login_modes",
             "has_refresh_token",
         )
@@ -108,6 +100,10 @@ class CheckChatgptTokenExpirySerializer(serializers.Serializer):
     ids = serializers.ListField(child=serializers.IntegerField(), required=False)
 
 class RefreshChatgptTokenSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+
+
+class ResetChatgptLoginCountSerializer(serializers.Serializer):
     id = serializers.IntegerField()
 
 class DeleteChatgptAccountSerializer(serializers.Serializer):

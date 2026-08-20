@@ -1,5 +1,4 @@
 import time
-from datetime import datetime
 
 from django.db.models import Q
 from django.utils import timezone
@@ -13,6 +12,7 @@ from rest_framework.views import APIView
 from app.accounts.models import User, VisitLog
 from app.accounts.serializers import ShowVisitLogModelSerializer, AddUserAccountSerializer, UserBindChatGPTSerializer, \
     ShowUserAccountModelSerializer, BatchModelLimitSerializer, BatchUserActionSerializer, ChangePasswordSerializer
+from app.accounts.serializers import ConversationTitlePrivacySerializer
 from app.accounts.authentication import set_auth_cookie
 from rest_framework.authtoken.models import Token
 from app.chatgpt.models import ChatgptAccount
@@ -100,21 +100,9 @@ class UserChatGPTAccountList(APIView):
                 account.refresh_auth_diagnostics()
             except Exception:
                 pass
-        chatgpt_list = [i.chatgpt_username for i in user_gpt_list]
-
-        try:
-            use_count_dict = req_gateway("post", "/api/get-chatgpt-use-count", json={"chatgpt_list": chatgpt_list})
-        except:
-            use_count_dict = {}
-
         auth_user_gpt_list = [i for i in user_gpt_list if i.auth_status]
-        current_minute = datetime.now().minute
 
         for line in auth_user_gpt_list or user_gpt_list:
-            gpt_use_count_dict = use_count_dict.get(line.chatgpt_username, {}).get("gpt-4o", {})
-            last_3h_use_count = (gpt_use_count_dict.get("last_1h", 0) +
-                          gpt_use_count_dict.get("last_2h", 0) + gpt_use_count_dict.get("last_3h", 0) +
-                          gpt_use_count_dict.get("last_4h", 0) * (1 - current_minute / 60))
             supported_login_modes = []
             if line.access_token_valid:
                 supported_login_modes.append("api")
@@ -122,7 +110,7 @@ class UserChatGPTAccountList(APIView):
                 supported_login_modes.append("web")
             results.append({
                 "id": line.id,
-                "use_count": last_3h_use_count,
+                "login_count": line.login_count,
                 "chatgpt_flag": "{:03}{}".format(line.id, line.chatgpt_username[:3]),
                 "plan_type": line.plan_type,
                 "auth_status": line.auth_status,
@@ -189,6 +177,7 @@ class CustomScriptConfigView(APIView):
     def post(self, request):
         return Response(req_gateway("post", "/api/custom-scripts", json={
             "scripts": request.data.get("scripts") or [],
+            "trusted_cdn_sources": request.data.get("trusted_cdn_sources") or [],
         }))
 
 
@@ -225,7 +214,20 @@ class UserAccountView(generics.ListCreateAPIView):
             use_count_dict = req_gateway("post", "/api/get-user-use-count", json={"username_list": username_list})
         except:
             use_count_dict = {}
-        serializer = ShowUserAccountModelSerializer(instance=page_accounts, use_count_dict=use_count_dict, many=True)
+        try:
+            conversation_stats_dict = req_gateway(
+                "post",
+                "/api/conversation-statistics",
+                json={"user_name_list": username_list},
+            )
+        except ValidationError:
+            conversation_stats_dict = {}
+        serializer = ShowUserAccountModelSerializer(
+            instance=page_accounts,
+            use_count_dict=use_count_dict,
+            conversation_stats_dict=conversation_stats_dict,
+            many=True,
+        )
         return pg.get_paginated_response(serializer.data)
 
     def post(self, request, *args, **kwargs):
@@ -352,9 +354,69 @@ class CurrentUserView(APIView):
             "authenticated": True,
             "username": request.user.username,
             "is_admin": bool(request.user.is_staff or request.user.is_superuser),
+            "allow_admin_view_conversation_titles": request.user.allow_admin_view_conversation_titles,
             "quota": quota_snapshot(request.user),
             "csrf_token": get_token(request),
         })
+
+
+class ConversationTitlePrivacyView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        serializer = ConversationTitlePrivacySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request.user.allow_admin_view_conversation_titles = serializer.validated_data[
+            "allow_admin_view_conversation_titles"
+        ]
+        request.user.save(update_fields=["allow_admin_view_conversation_titles"])
+        return Response({
+            "message": "对话标题隐私设置已保存",
+            "allow_admin_view_conversation_titles": request.user.allow_admin_view_conversation_titles,
+        })
+
+
+class UserConversationStatisticsView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminUser)
+
+    def get_user(self, user_id):
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            raise ValidationError("用户不存在")
+        return user
+
+    def get(self, request, user_id):
+        user = self.get_user(user_id)
+        result = req_gateway(
+            "post",
+            "/api/conversation-statistics",
+            json={"user_name": user.username},
+        )
+        title_visible = bool(user.allow_admin_view_conversation_titles)
+        conversations = []
+        for item in result.get("conversations") or []:
+            conversation_id = str(item.get("conversation_id") or "")
+            conversations.append({
+                "conversation_id": conversation_id,
+                "display_title": (
+                    str(item.get("title") or conversation_id)
+                    if title_visible
+                    else conversation_id
+                ),
+                "message_count": int(item.get("message_count") or 0),
+                "updated_at": item.get("updated_at"),
+            })
+        result["conversations"] = conversations
+        result["title_visible"] = title_visible
+        return Response(result)
+
+    def delete(self, request, user_id):
+        user = self.get_user(user_id)
+        return Response(req_gateway(
+            "post",
+            "/api/conversation-statistics/reset",
+            json={"user_name": user.username},
+        ))
 
 
 class ChangePasswordView(APIView):

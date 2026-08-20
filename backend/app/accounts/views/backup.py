@@ -35,6 +35,7 @@ class UnifiedBackupView(APIView):
                     "daily_quota": user.daily_quota,
                     "monthly_quota": user.monthly_quota,
                     "force_chat_mode": user.force_chat_mode,
+                    "allow_admin_view_conversation_titles": user.allow_admin_view_conversation_titles,
                 }
                 for user in User.objects.all()
             ],
@@ -47,7 +48,7 @@ class UnifiedBackupView(APIView):
                         "chatgpt_username", "auth_status", "plan_type", "access_token",
                         "session_token", "extra_cookies", "refresh_token", "refresh_client_id",
                         "access_token_valid", "session_token_valid", "proxy_node_id",
-                        "last_check_at", "last_error", "remark", "created_time", "updated_time",
+                        "last_check_at", "last_error", "login_count", "remark", "created_time", "updated_time",
                         )
                     },
                 }

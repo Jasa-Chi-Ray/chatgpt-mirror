@@ -25,6 +25,7 @@ class ChatgptAccount(models.Model):
     proxy_node_id = models.IntegerField(null=True, blank=True, verbose_name="代理节点")
     last_check_at = models.IntegerField(null=True, blank=True, verbose_name="最近诊断时间")
     last_error = models.TextField(null=True, blank=True, verbose_name="最近诊断错误")
+    login_count = models.PositiveBigIntegerField(default=0, verbose_name="被登录次数")
     remark = models.TextField(null=True, blank=True,verbose_name="备注")
     created_time = models.IntegerField(db_index=True, blank=True, verbose_name="创建时间")
     updated_time = models.IntegerField(db_index=True, blank=True, verbose_name="最后修改时间")

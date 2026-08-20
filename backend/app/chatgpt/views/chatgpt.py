@@ -2,6 +2,7 @@ import time
 
 import jwt
 from django.db import transaction
+from django.db.models import F
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
@@ -10,7 +11,7 @@ from rest_framework.views import APIView
 from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.chatgpt.serializers import ShowChatgptTokenSerializer, AddChatgptTokenSerializer, ChatGPTLoginSerializer, \
     UpdateChatgptInfoSerializer, DeleteChatgptAccountSerializer, CheckChatgptTokenExpirySerializer, \
-    RefreshChatgptTokenSerializer
+    RefreshChatgptTokenSerializer, ResetChatgptLoginCountSerializer
 from app.page import DefaultPageNumberPagination
 from app.settings import CHATGPT_GATEWAY_URL
 from app.utils import get_request_subject, save_visit_log, req_gateway
@@ -80,13 +81,7 @@ class ChatGPTAccountView(generics.ListCreateAPIView):
                 account.refresh_auth_diagnostics()
             except Exception:
                 pass
-        chatgpt_list = [i.chatgpt_username for i in page_accounts]
-
-        try:
-            use_count_dict = req_gateway("post", "/api/get-chatgpt-use-count", json={"chatgpt_list": chatgpt_list})
-        except:
-            use_count_dict = {}
-        serializer = ShowChatgptTokenSerializer(instance=page_accounts, use_count_dict=use_count_dict, many=True)
+        serializer = ShowChatgptTokenSerializer(instance=page_accounts, many=True)
         return pg.get_paginated_response(serializer.data)
 
     def post(self, request, *args, **kwargs):
@@ -224,15 +219,7 @@ class ChatGPTLoginView(APIView):
             ]
             if not candidates:
                 raise ValidationError("账号池中没有可用上游账号")
-            use_counts = req_gateway("post", "/api/get-chatgpt-use-count", json={
-                "chatgpt_list": [item.chatgpt_username for item in candidates],
-            })
-            def usage_score(item):
-                hourly = use_counts.get(item.chatgpt_username, {}).get("gpt-4o", {})
-                return sum(int(hourly.get(key, 0)) for key in (
-                    "last_1h", "last_2h", "last_3h", "last_4h"
-                ))
-            chatgpt = min(candidates, key=usage_score)
+            chatgpt = min(candidates, key=lambda item: (item.login_count, item.id))
         else:
             chatgpt = ChatgptAccount.get_by_id(chatgpt_id)
 
@@ -260,6 +247,20 @@ class ChatGPTLoginView(APIView):
         # print(payload)
         res_json = req_gateway("post", "/api/login", json=payload)
 
+        ChatgptAccount.objects.filter(id=chatgpt.id).update(login_count=F("login_count") + 1)
+
         save_visit_log(request, "choose-gpt", chatgpt.chatgpt_username)
 
         return Response(res_json)
+
+
+class ChatGPTLoginCountResetView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminUser)
+
+    def post(self, request):
+        serializer = ResetChatgptLoginCountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        updated = ChatgptAccount.objects.filter(id=serializer.validated_data["id"]).update(login_count=0)
+        if not updated:
+            raise ValidationError("账号不存在")
+        return Response({"message": "被登录次数已重置"})
