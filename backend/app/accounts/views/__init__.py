@@ -144,6 +144,7 @@ class MirrorProxyConfigView(APIView):
         if isinstance(enabled, str):
             enabled = enabled.strip().lower() in ("1", "true", "yes", "on")
         return Response(req_gateway("post", "/api/mirror-proxy-config", json={
+            "transport_mode": request.data.get("transport_mode") or "reqwest",
             "enabled": bool(enabled),
             "proxy_url": request.data.get("proxy_url"),
             "username": request.data.get("username"),
@@ -160,6 +161,7 @@ class MirrorProxyTestView(APIView):
         if isinstance(enabled, str):
             enabled = enabled.strip().lower() in ("1", "true", "yes", "on")
         return Response(req_gateway("post", "/api/test-mirror-proxy-config", json={
+            "transport_mode": request.data.get("transport_mode") or "reqwest",
             "enabled": bool(enabled),
             "proxy_url": request.data.get("proxy_url"),
             "username": request.data.get("username"),
@@ -234,34 +236,35 @@ class UserAccountView(generics.ListCreateAPIView):
         # 添加或更新用户
         serializer = AddUserAccountSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        if serializer.data["username"] == ADMIN_USERNAME:
+        data = serializer.validated_data
+        if data["username"] == ADMIN_USERNAME:
             raise ValidationError({"message": "管理员账号不能操作"})
 
-        user = User.objects.filter(username=serializer.data["username"]).first()
+        user = User.objects.filter(username=data["username"]).first()
         created = user is None
         if created:
-            if not serializer.data.get("password"):
+            if not data.get("password"):
                 raise ValidationError({"password": "新增用户必须设置密码"})
-            user = User(username=serializer.data["username"])
+            user = User(username=data["username"])
 
-        if serializer.data.get("password"):
-            user.set_password(serializer.data["password"])
+        if data.get("password"):
+            user.set_password(data["password"])
 
-        if "expired_date" in serializer.data.keys():
-            user.expired_date = serializer.data["expired_date"]
+        if "expired_date" in data:
+            user.expired_date = data["expired_date"]
 
-        user.gptcar_list = serializer.data["gptcar_list"]
-        user.is_active = serializer.data["is_active"]
-        user.model_limit = serializer.data["model_limit"]
-        user.isolated_session = serializer.data["isolated_session"]
-        user.remark = serializer.data["remark"]
-        user.daily_quota = serializer.data.get("daily_quota", 0)
-        user.monthly_quota = serializer.data.get("monthly_quota", 0)
-        if "force_chat_mode" in serializer.validated_data:
-            user.force_chat_mode = serializer.validated_data["force_chat_mode"]
+        user.gptcar_list = data["gptcar_list"]
+        user.is_active = data["is_active"]
+        user.model_limit = data["model_limit"]
+        user.isolated_session = data["isolated_session"]
+        user.remark = data["remark"]
+        user.daily_quota = data.get("daily_quota", 0)
+        user.monthly_quota = data.get("monthly_quota", 0)
+        if "force_chat_mode" in data:
+            user.force_chat_mode = data["force_chat_mode"]
         user.save()
 
-        if "force_chat_mode" in serializer.validated_data:
+        if "force_chat_mode" in data:
             try:
                 req_gateway("post", "/api/user-work-mode", json={
                     "user_name": user.username,
@@ -270,7 +273,7 @@ class UserAccountView(generics.ListCreateAPIView):
             except ValidationError:
                 pass
 
-        credentials_changed = bool(serializer.data.get("password"))
+        credentials_changed = bool(data.get("password"))
         access_revoked = not user.is_active or (
             user.expired_date and user.expired_date <= timezone.localdate()
         )

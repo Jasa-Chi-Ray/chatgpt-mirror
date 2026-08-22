@@ -1,7 +1,6 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
-from rest_framework.exceptions import ValidationError
 
 from app.settings import SHOW_GITHUB, TURNSTILE_ENABLED, TURNSTILE_SITE_KEY
 from app.utils import req_gateway

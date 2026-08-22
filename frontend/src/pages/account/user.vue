@@ -105,7 +105,13 @@
           </template>
         </t-form-item>
         <t-form-item label="过期日期" name="expired_date">
-          <t-date-picker v-model="formData.expired_date" placeholder="留空则永久有效" />
+          <t-date-picker
+            v-model="formData.expired_date"
+            format="YYYY-MM-DD"
+            value-type="YYYY-MM-DD"
+            clearable
+            placeholder="留空则永久有效"
+          />
         </t-form-item>
         <t-form-item label="每日配额" name="daily_quota">
           <t-input-number v-model="formData.daily_quota" :min="0" />
@@ -359,16 +365,13 @@ const handleSubmit = async () => {
     gptcar_list: formData.gptcar_list,
     model_limit: modelLimit,
     remark: formData.remark,
+    expired_date: formData.expired_date || null,
     daily_quota: formData.daily_quota,
     monthly_quota: formData.monthly_quota
   }
 
   if (formData.password.trim()) {
     Object.assign(payload, { password: formData.password })
-  }
-
-  if (formData.expired_date) {
-    Object.assign(payload, { expired_date: formData.expired_date })
   }
 
   const data = await request(url, method, payload)

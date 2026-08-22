@@ -1,5 +1,5 @@
-from unittest.mock import patch
 from datetime import timedelta
+from unittest.mock import Mock, call, patch
 
 from django.db import connection
 from django.test import TestCase
@@ -11,10 +11,11 @@ from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from app.accounts.models import Announcement, User, VisitLog
 from app.accounts.views import (
-    VisitLogView,
     ChangePasswordView,
     ConversationTitlePrivacyView,
+    UserAccountView,
     UserConversationStatisticsView,
+    VisitLogView,
 )
 from app.accounts.authentication import AUTH_COOKIE_NAME, ExpiringCookieTokenAuthentication
 from app.accounts.views.cfg import AccessControlView
@@ -26,11 +27,75 @@ from app.accounts.views.login import (
     UserFreeLoginView,
     verify_turnstile,
 )
+from app.accounts.views.backup import (
+    GATEWAY_BACKUP_COLLECTIONS,
+    GATEWAY_BACKUP_VERSION,
+    _require_complete_gateway_backup,
+    _restore_django_and_gateway,
+)
 from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.chatgpt.serializers import ShowChatgptTokenSerializer
 from app.chatgpt.views.chatgpt import ChatGPTLoginView, ChatGPTLoginCountResetView
 from app.settings import ADMIN_USERNAME, FREE_ACCOUNT_USERNAME
 from app.utils import get_client_ip
+
+
+class UnifiedBackupValidationTests(TestCase):
+    def _gateway_backup(self):
+        return {
+            "version": GATEWAY_BACKUP_VERSION,
+            **{name: [] for name in GATEWAY_BACKUP_COLLECTIONS},
+        }
+
+    def test_complete_gateway_backup_requires_matching_version_and_all_collections(self):
+        payload = self._gateway_backup()
+        _require_complete_gateway_backup(payload)
+
+        payload["version"] = 1
+        with self.assertRaises(ValidationError):
+            _require_complete_gateway_backup(payload)
+
+        payload = self._gateway_backup()
+        payload.pop("gateway_sessions")
+        with self.assertRaises(ValidationError):
+            _require_complete_gateway_backup(payload)
+
+    @patch("app.accounts.views.backup.req_gateway")
+    def test_gateway_is_rolled_back_when_django_restore_fails(self, req_gateway):
+        previous = self._gateway_backup()
+        target = self._gateway_backup()
+        req_gateway.side_effect = [previous, {"message": "restored"}, {"message": "rolled back"}]
+        restore_django = Mock(side_effect=RuntimeError("django restore failed"))
+
+        with self.assertRaisesRegex(RuntimeError, "django restore failed"):
+            _restore_django_and_gateway(target, restore_django)
+
+        self.assertEqual(
+            req_gateway.call_args_list,
+            [
+                call("get", "/api/backup/export"),
+                call("post", "/api/backup/restore", json=target),
+                call("post", "/api/backup/restore", json=previous),
+            ],
+        )
+
+    @patch("app.accounts.views.backup.req_gateway")
+    def test_gateway_failure_also_attempts_rollback(self, req_gateway):
+        previous = self._gateway_backup()
+        target = self._gateway_backup()
+        req_gateway.side_effect = [
+            previous,
+            RuntimeError("gateway restore failed"),
+            {"message": "rolled back"},
+        ]
+
+        with self.assertRaisesRegex(RuntimeError, "gateway restore failed"):
+            _restore_django_and_gateway(target, Mock())
+
+        self.assertEqual(
+            req_gateway.call_args_list[-1],
+            call("post", "/api/backup/restore", json=previous),
+        )
 
 
 class SecurityRegressionTests(TestCase):
@@ -43,6 +108,41 @@ class SecurityRegressionTests(TestCase):
 
     def test_empty_account_pool_is_fail_closed(self):
         self.assertFalse(ChatgptAccount.get_by_gptcar_list([]).exists())
+
+    def test_user_expired_date_can_be_assigned_and_cleared(self):
+        admin = User.objects.create_superuser(
+            username="expiry-admin",
+            password="Strong-password-123!",
+        )
+        user = User.objects.create_user(
+            username="expiry-user",
+            password="Strong-password-123!",
+        )
+        expires_at = timezone.localdate() + timedelta(days=30)
+        payload = {
+            "username": user.username,
+            "is_active": True,
+            "isolated_session": True,
+            "gptcar_list": [],
+            "model_limit": [],
+            "remark": "",
+            "expired_date": expires_at.isoformat(),
+        }
+
+        request = self.factory.post("/0x/user/", payload, format="json")
+        force_authenticate(request, user=admin)
+        response = UserAccountView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.expired_date, expires_at)
+
+        payload["expired_date"] = None
+        request = self.factory.post("/0x/user/", payload, format="json")
+        force_authenticate(request, user=admin)
+        response = UserAccountView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertIsNone(user.expired_date)
 
     def test_client_ip_prefers_gateway_forwarded_address(self):
         request = self.factory.get(

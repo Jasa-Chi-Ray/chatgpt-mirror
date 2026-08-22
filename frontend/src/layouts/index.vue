@@ -240,12 +240,38 @@ const handleUserAction = (data: { value: string }) => {
   }
 
   .nav-menu :deep(.t-menu__item) {
+    position: relative;
+    display: flex !important;
+    align-items: center;
     justify-content: center;
-    padding: 0;
+    min-width: 44px;
+    padding: 0 !important;
+  }
+
+  .nav-menu :deep(.t-menu__item-icon),
+  .nav-menu :deep(.t-menu__item > .t-icon),
+  .nav-menu :deep(.t-menu__item .t-icon) {
+    display: inline-flex !important;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin: 0 !important;
+    font-size: 20px;
+    opacity: 1;
+    visibility: visible;
   }
 
   .menu-label {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
   }
 
   .header {

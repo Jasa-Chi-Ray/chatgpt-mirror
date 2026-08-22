@@ -77,10 +77,6 @@
     >
       <t-loading :loading="tableLoading">
         <t-space direction="vertical" style="width: 100%; margin-bottom: 16px" :size="12">
-          <t-alert
-            theme="warning"
-            message="管理员有权记录您的对话数量及模型消息统计，但不会记录对话正文。管理员查看不含正文的对话标题权限默认关闭，您可在账户中心主动授权。"
-          />
           <div class="mode-switch">
             <span class="mode-switch__label">登录模式</span>
             <t-radio-group v-model="selectedMode" variant="default-filled">

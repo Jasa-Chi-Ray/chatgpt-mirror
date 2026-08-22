@@ -2,6 +2,25 @@
   <div>
     <t-card title="代理" subtitle="为指定上游账号配置独立的网络出口" :bordered="false">
       <t-form :data="formData" label-width="110px" class="proxy-form">
+        <t-form-item label="HTTP 传输">
+          <template #help>
+            <span class="form-help">
+              reqwest 为稳定模式；wreq 使用 Chrome 149 风格的 TLS/HTTP2。切换会立即重建直连及所有节点连接池，不保证阻止上游模型回退。
+            </span>
+          </template>
+          <div class="transport-control">
+            <t-radio-group
+              v-model="formData.transport_mode"
+              variant="default-filled"
+              :disabled="saving"
+              @change="handleTransportChange"
+            >
+              <t-radio-button value="reqwest">reqwest</t-radio-button>
+              <t-radio-button value="wreq">wreq</t-radio-button>
+            </t-radio-group>
+            <t-tag theme="primary" variant="light">当前：{{ formData.transport_mode }}</t-tag>
+          </div>
+        </t-form-item>
         <t-form-item label="节点">
           <template #help>
             <span class="form-help">账号不绑定节点时直连；绑定节点后，只有需要代理的上游域名走该节点。</span>
@@ -49,7 +68,7 @@
           </div>
         </t-form-item>
         <t-form-item>
-          <t-button theme="primary" :loading="saving" @click="handleSave">
+          <t-button theme="primary" :loading="saving" @click="handleSave()">
             保存
           </t-button>
           <t-button variant="outline" @click="addNode">
@@ -72,6 +91,7 @@ import request from '@/api/request'
 const loading = ref(false)
 const saving = ref(false)
 const testingNodeId = ref<number | null>(null)
+const lastSavedTransportMode = ref<TransportMode>('reqwest')
 
 type ProxyNodeForm = {
   localKey: number
@@ -85,7 +105,10 @@ type ProxyNodeForm = {
 
 let nextLocalKey = 1
 
-const formData = reactive<{ nodes: ProxyNodeForm[] }>({
+type TransportMode = 'reqwest' | 'wreq'
+
+const formData = reactive<{ transport_mode: TransportMode; nodes: ProxyNodeForm[] }>({
+  transport_mode: 'reqwest',
   nodes: []
 })
 
@@ -114,6 +137,8 @@ const fetchConfig = async () => {
   loading.value = false
 
   if (data) {
+    formData.transport_mode = data.transport_mode === 'wreq' ? 'wreq' : 'reqwest'
+    lastSavedTransportMode.value = formData.transport_mode
     applyNodes(data.nodes || [])
   }
 }
@@ -146,21 +171,34 @@ const validateNodes = () => {
   return true
 }
 
-const handleSave = async () => {
+const handleSave = async (transportChanged = false) => {
   if (!validateNodes()) {
+    if (transportChanged) {
+      formData.transport_mode = lastSavedTransportMode.value
+    }
     return
   }
 
   saving.value = true
   const data = await request('/0x/user/proxy-config', 'POST', {
+    transport_mode: formData.transport_mode,
     nodes: serializeNodes()
   })
   saving.value = false
 
   if (data) {
+    formData.transport_mode = data.transport_mode === 'wreq' ? 'wreq' : 'reqwest'
+    lastSavedTransportMode.value = formData.transport_mode
     applyNodes(data.nodes || [])
-    MessagePlugin.success('保存成功')
+    MessagePlugin.success(transportChanged ? `已切换为 ${formData.transport_mode}` : '保存成功')
+  } else if (transportChanged) {
+    formData.transport_mode = lastSavedTransportMode.value
   }
+}
+
+const handleTransportChange = (value: TransportMode) => {
+  formData.transport_mode = value
+  handleSave(true)
 }
 
 const addNode = () => {
@@ -186,6 +224,7 @@ const handleTestNode = async (node: ProxyNodeForm) => {
 
   testingNodeId.value = node.localKey
   const data = await request('/0x/user/proxy-config/test', 'POST', {
+    transport_mode: formData.transport_mode,
     enabled: node.enabled,
     proxy_url: node.proxy_url.trim(),
     username: node.username.trim(),
@@ -206,6 +245,13 @@ const handleTestNode = async (node: ProxyNodeForm) => {
 
 .proxy-form :deep(.t-button + .t-button) {
   margin-left: 12px;
+}
+
+.transport-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .node-list {

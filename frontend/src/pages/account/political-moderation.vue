@@ -24,8 +24,8 @@
           <template #help>
             <span class="field-help">
               {{ form.mode === 'relaxed'
-                ? '允许中立的战争史、国家科技经济文化趋势；拒绝站队、归责、政治说服和现实争议结论。'
-                : '涉及现实国家、政府、政党、政治人物、战争、领土、外交等内容均拒绝，仅放行明显的非政治误命中。' }}
+                ? '允许普通地理、旅行和中立事实讨论，以及不站队的历史与趋势分析；拒绝政治站队、归责说服、煽动仇恨和现实争议定性。'
+                : '国家名和地理位置可正常询问；仅当主要意图实质涉及现实政治、政府政党、战争军事、领土主权或外交制裁时拒绝。' }}
             </span>
           </template>
         </t-form-item>
@@ -92,7 +92,7 @@
 
         <t-form-item>
           <t-space>
-            <t-button variant="outline" :loading="testing" @click="testConnection">验证模型连通性</t-button>
+            <t-button variant="outline" :loading="testing" @click="testConnection">验证模型与规则</t-button>
             <t-button theme="primary" :loading="saving" @click="saveConfig">保存配置</t-button>
           </t-space>
         </t-form-item>

@@ -233,7 +233,7 @@ const columns = [
   { colKey: 'supported_login_modes', title: '支持模式', cell: 'supported_login_modes', width: 160 },
   { colKey: 'login_count', title: '被登录次数', cell: 'login_count', width: 120 },
   { colKey: 'proxy_node_id', title: '代理节点', cell: 'proxy_node_id', width: 110 },
-  { colKey: 'token_remaining', title: 'Token剩余', cell: 'token_remaining', width: 130 },
+  { colKey: 'token_remaining', title: 'AccessToken剩余', cell: 'token_remaining', width: 150 },
   { colKey: 'last_check_at', title: '最近诊断', cell: 'last_check_at', width: 160 },
   { colKey: 'last_error', title: '诊断结果', cell: 'last_error', ellipsis: true },
   { colKey: 'remark', title: '备注', ellipsis: true },
@@ -295,11 +295,16 @@ const formatSeconds = (seconds: number | null) => {
 }
 
 const formatTokenRemaining = (row: any) => {
-  return formatSeconds(secondsUntilAccessTokenExpiry(row))
+  const seconds = secondsUntilAccessTokenExpiry(row)
+  if ((seconds === null || seconds <= 0) && row?.session_token_valid) {
+    return '待刷新'
+  }
+  return formatSeconds(seconds)
 }
 
 const getTokenRemainingTheme = (row: any) => {
   const seconds = secondsUntilAccessTokenExpiry(row)
+  if ((seconds === null || seconds <= 0) && row?.session_token_valid) return 'warning'
   if (seconds === null || seconds <= 0) return 'danger'
   if (seconds < 86400) return 'warning'
   return 'success'
@@ -464,10 +469,10 @@ const mergeTokenCheckResults = (results: any[]) => {
 const summarizeTokenCheck = (results: any[]) => {
   if (results.length === 0) return '没有可检测的账号'
   if (results.length === 1) {
-    return `Token剩余：${formatSeconds(results[0].remaining_seconds)}`
+    return `AccessToken剩余：${formatTokenRemaining(results[0])}`
   }
   const expiredCount = results.filter(item => item.expired).length
-  return `检测完成：${results.length}个账号，已过期${expiredCount}个`
+  return `检测完成：${results.length}个账号，AccessToken已过期${expiredCount}个`
 }
 
 const handleCheckTokenExpiry = async (row?: any) => {
