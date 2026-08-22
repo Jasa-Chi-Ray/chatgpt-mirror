@@ -51,6 +51,10 @@ ChatGPT Mirror 是一个面向多用户场景的 ChatGPT 镜像管理项目，�
 
 ### 操作演示
 
+
+https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
+
+
 [▶ 查看演示视频](./imageandvideo/演示1.mp4)
 
 > GitHub 页面无法直接播放视频时，可点击链接查看或下载原始文件。
