@@ -1,8 +1,6 @@
 services:
   chatgpt-mirror:
     image: lisa666520/chatgpt-mirror-django:frontend
-    env_file:
-      - .env
     ports:
       - "${PORT:-40002}:${PORT:-40002}"
     volumes:
@@ -10,6 +8,7 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "${PORT:-40002}"
+      TZ: "${TZ:-Asia/Shanghai}"
       NO_PROXY: "localhost,127.0.0.1,django,chatgpt-mirror,cfbypass"
       no_proxy: "localhost,127.0.0.1,django,chatgpt-mirror,cfbypass"
       DATABASE_PATH: "/app/data/chatgpt_mirror.db"
@@ -41,8 +40,6 @@ services:
 
   django:
     image: lisa666520/chatgpt-mirror-django:backend
-    env_file:
-      - .env
     ports:
       - "127.0.0.1:18000:8000"
     environment:
@@ -50,8 +47,9 @@ services:
       DJANGO_DEBUG: "${DJANGO_DEBUG:-false}"
       DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY must be set}"
       DJANGO_ALLOW_ALL_ORIGINS: "${DJANGO_ALLOW_ALL_ORIGINS:-disable}"
-      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-django,localhost,127.0.0.1,Example.com}"
-      DJANGO_CSRF_TRUSTED_ORIGINS: "${DJANGO_CSRF_TRUSTED_ORIGINS:-https://Example.com}"
+      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-django,localhost,127.0.0.1}"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "${DJANGO_CSRF_TRUSTED_ORIGINS:-}"
+      DJANGO_SECURE_SSL_REDIRECT: "${DJANGO_SECURE_SSL_REDIRECT:-false}"
       DJANGO_SESSION_COOKIE_SECURE: "${DJANGO_SESSION_COOKIE_SECURE:-true}"
       DJANGO_CSRF_COOKIE_SECURE: "${DJANGO_CSRF_COOKIE_SECURE:-true}"
       SHOW_GITHUB: "${SHOW_GITHUB:-true}"
@@ -87,8 +85,6 @@ services:
 
   cfbypass:
     image: lisa666520/chatgpt-mirror-django:cfbypass
-    env_file:
-      - .env
     command:
       - uvicorn
       - app:app
@@ -100,12 +96,16 @@ services:
       - "127.0.0.1:18001:8000"
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
+      CF_BYPASS_USER_AGENT: "${CF_BYPASS_USER_AGENT:-Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36}"
       CF_BYPASS_HEADLESS: "${CF_BYPASS_HEADLESS:-true}"
       CF_BYPASS_MAX_WAIT_SECONDS: "${CF_BYPASS_MAX_WAIT_SECONDS:-20}"
       CF_BYPASS_PAGE_LOAD_TIMEOUT_SECONDS: "${CF_BYPASS_PAGE_LOAD_TIMEOUT_SECONDS:-15}"
+      CF_BYPASS_FIRST_COOKIE_WAIT_SECONDS: "${CF_BYPASS_FIRST_COOKIE_WAIT_SECONDS:-6}"
       CF_BYPASS_POLL_INTERVAL_SECONDS: "${CF_BYPASS_POLL_INTERVAL_SECONDS:-0.5}"
       CF_BYPASS_COOKIE_STABLE_POLLS: "${CF_BYPASS_COOKIE_STABLE_POLLS:-2}"
       CF_BYPASS_NAVIGATION_RETRIES: "${CF_BYPASS_NAVIGATION_RETRIES:-1}"
+      CF_BYPASS_ELEMENT_LOOKUP_TIMEOUT_SECONDS: "${CF_BYPASS_ELEMENT_LOOKUP_TIMEOUT_SECONDS:-0.2}"
+      CF_BYPASS_DISPLAY_SIZE: "${CF_BYPASS_DISPLAY_SIZE:-1920x1080}"
       CF_BYPASS_SECRET: "${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set}"
       CF_BYPASS_ALLOWED_HOSTS: "${CF_BYPASS_ALLOWED_HOSTS:-chatgpt.com,.chatgpt.com}"
     shm_size: "1gb"
