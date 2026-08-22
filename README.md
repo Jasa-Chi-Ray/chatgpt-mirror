@@ -86,7 +86,6 @@ chatgpt-mirror/
 cp .env.example .env
 ```
 
-Docker Compose 会自动读取项目根目录的 `.env`，不需要执行 `source .env`。
 
 然后编辑 `.env`，至少替换以下示例值：
 
@@ -155,7 +154,6 @@ docker compose down
 | 脚本管理 | 维护站点所需的自定义脚本配置 |
 | 访问限制 | 配置不允许镜像用户访问的页面或功能范围 |
 
-更多使用与排障说明见 [FAQ](./FAQ.md)。
 
 ## 安全与使用边界
 
@@ -176,6 +174,12 @@ docker compose down
 
 - 针对 iPhone Safari 和 iPhone Chrome 偶发请求失败、页面资源解析警告等现象进行兼容性调整。
 - 保持桌面端原有访问行为不变.
+- 增加敏感词（主要用于政治内容）机制检测和验证
+- 增加新的方案，位于代理界面（reqwest/wreq）
+- 优化 bypass 请求
+- 优化代理分流
+- 添加公告功能
+- 细节优化
 
 ### 2026-07
 
