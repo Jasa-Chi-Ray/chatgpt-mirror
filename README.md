@@ -213,7 +213,9 @@ docker compose down
 - 细节优化
 - 公告支持 markdown
 - 增加可信域名直接配置列表（脚本）
-- 增加新的最终方案（curl-impersonate）
+- 增加新的实验性最终方案（curl-impersonate）
+- 优化降智检测和必要的应对方案
+- 大幅度减少 Pro 模型的降智几率
 
 ### 2026-07
 
