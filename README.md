@@ -66,7 +66,22 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
 ![降智情况 2026-08-26](./imageandvideo/Snapzy_2026-08-26_12-43-58_266.png)
 
+<<<<<<< HEAD
 > GitHub 页面无法直接播放视频时，可点击链接查看或下载原始文件。
+=======
+
+#### 降智复测
+
+![复测01](./imageandvideo/复测%2001.png)
+
+![复测02](./imageandvideo/复测%2002.png)
+
+> 本降智测试已在最新版本中的“代理“界面开启**实验性**的“curl-impersonate“，实验模式造成的后果需自行承担
+
+
+![实验模式](./imageandvideo/方案.png)
+
+>>>>>>> b49b48f (降智复测)
 
 ## 项目结构
 
