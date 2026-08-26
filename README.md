@@ -6,6 +6,10 @@ ChatGPT Mirror 是一个面向多用户场景的 ChatGPT 镜像管理项目，�
 
 ---
 
+## 目前致力于解决降智问题，其他功能可能会更新不及时
+
+---
+
 ## 目录
 
 - [技术栈](#技术栈)
@@ -57,6 +61,10 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
 
 [▶ 查看演示视频](./imageandvideo/演示1.mp4)
+
+### 最新版本降智情况（原生日本 IP）
+
+![降智情况 2026-08-26](./imageandvideo/Snapzy_2026-08-26_12-43-58_266.png)
 
 > GitHub 页面无法直接播放视频时，可点击链接查看或下载原始文件。
 
