@@ -62,13 +62,13 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
 [▶ 查看演示视频](./imageandvideo/演示1.mp4)
 
+> GitHub 页面无法直接播放视频时，可点击链接查看或下载原始文件。
+
+
 ### 最新版本降智情况（原生日本 IP）
 
 ![降智情况 2026-08-26](./imageandvideo/Snapzy_2026-08-26_12-43-58_266.png)
 
-<<<<<<< HEAD
-> GitHub 页面无法直接播放视频时，可点击链接查看或下载原始文件。
-=======
 
 #### 降智及降智复测
 
@@ -85,7 +85,6 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
 ![实验模式](./imageandvideo/方案.png)
 
->>>>>>> b49b48f (降智复测)
 
 ## 项目结构
 
