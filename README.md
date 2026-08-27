@@ -70,11 +70,15 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 > GitHub 页面无法直接播放视频时，可点击链接查看或下载原始文件。
 =======
 
-#### 降智复测
+#### 降智及降智复测
 
 ![复测01](./imageandvideo/复测%2001.png)
 
 ![复测02](./imageandvideo/复测%2002.png)
+
+添加项目隔离后降智复测
+
+![添加项目隔离后降智复测](./imageandvideo/Snapzy_2026-08-27复测.png)
 
 > 本降智测试已在最新版本中的“代理“界面开启**实验性**的“curl-impersonate“，实验模式造成的后果需自行承担
 
