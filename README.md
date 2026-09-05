@@ -76,6 +76,10 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
 ![复测02](./imageandvideo/复测%2002.png)
 
+#### GPT-Astra 降智复测
+
+![复测03-GPT-Astra](./imageandvideo/复测-20160905-GPT-Astra.png)
+
 添加项目隔离后降智复测
 
 ![添加项目隔离后降智复测](./imageandvideo/Snapzy_2026-08-27复测.png)
