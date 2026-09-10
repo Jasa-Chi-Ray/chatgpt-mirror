@@ -128,6 +128,11 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   const authenticated = await userStore.hydrate()
+  if (authenticated && userStore.isAdmin && to.name === 'Profile') {
+    next('/account/overview')
+    return
+  }
+
   if (to.meta.requiresAdmin && (!authenticated || !userStore.isAdmin)) {
     clearAccessibleCookies()
     window.location.replace('/admin#/')

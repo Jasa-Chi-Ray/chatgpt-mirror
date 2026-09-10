@@ -52,7 +52,10 @@ class ShowUserAccountModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         exclude = (
-            "password", "is_superuser", "first_name", "last_name", "email", "is_staff", "groups", "user_permissions")
+            "password", "is_superuser", "first_name", "last_name", "email", "is_staff",
+            "groups", "user_permissions", "capability_account_id",
+            "capability_policy_initialized", "mcp_allowlist", "skills_allowlist",
+        )
         # fields = "__all__"
 
 
@@ -65,6 +68,8 @@ class AddUserAccountSerializer(serializers.Serializer):
     model_limit = serializers.JSONField(default=dict)
     remark = serializers.CharField(default="", allow_blank=True)
     isolated_session = serializers.BooleanField()
+    mcp_isolation = serializers.BooleanField(required=False, default=True)
+    skills_isolation = serializers.BooleanField(required=False, default=True)
     expired_date = serializers.DateField(required=False, allow_null=True)
     daily_quota = serializers.IntegerField(required=False, min_value=0, default=0)
     monthly_quota = serializers.IntegerField(required=False, min_value=0, default=0)
@@ -81,6 +86,16 @@ class AddUserAccountSerializer(serializers.Serializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(list(exc.messages))
         return value
+
+
+class UserCapabilityPolicySerializer(serializers.Serializer):
+    account_id = serializers.IntegerField(min_value=1)
+    mcp_allowed_ids = serializers.ListField(
+        child=serializers.CharField(max_length=300), allow_empty=True, max_length=1000
+    )
+    skills_allowed_ids = serializers.ListField(
+        child=serializers.CharField(max_length=300), allow_empty=True, max_length=1000
+    )
 
 
 class BatchModelLimitSerializer(serializers.Serializer):

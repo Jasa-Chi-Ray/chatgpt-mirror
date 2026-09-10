@@ -9,16 +9,18 @@ from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
-from app.accounts.models import Announcement, User, VisitLog
+from app.accounts.models import Announcement, User, VisitLog, GatewayRevocation
 from app.accounts.views import (
     ChangePasswordView,
     ConversationTitlePrivacyView,
+    CustomScriptConfigView,
     UserAccountView,
     UserConversationStatisticsView,
+    UserSessionRevokeView,
     VisitLogView,
 )
 from app.accounts.authentication import AUTH_COOKIE_NAME, ExpiringCookieTokenAuthentication
-from app.accounts.views.cfg import AccessControlView
+from app.accounts.views.cfg import AccessControlView, PoliticalModerationConfigView
 from app.accounts.views.announcements import AnnouncementAdminView, CurrentAnnouncementView
 from app.accounts.views.login import (
     AccountLogin,
@@ -32,12 +34,14 @@ from app.accounts.views.backup import (
     GATEWAY_BACKUP_VERSION,
     _require_complete_gateway_backup,
     _restore_django_and_gateway,
+    UnifiedBackupView,
 )
 from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.chatgpt.serializers import ShowChatgptTokenSerializer
 from app.chatgpt.views.chatgpt import ChatGPTLoginView, ChatGPTLoginCountResetView
+from app.chatgpt.views.gptcar import GptCarDetailView, GptCarUserAssignmentView
 from app.settings import ADMIN_USERNAME, FREE_ACCOUNT_USERNAME
-from app.utils import get_client_ip
+from app.utils import get_client_ip, req_gateway
 
 
 class UnifiedBackupValidationTests(TestCase):
@@ -106,8 +110,149 @@ class SecurityRegressionTests(TestCase):
         user = User.objects.create_user(username="work-mode-user", password="Strong-password-123!")
         self.assertTrue(user.force_chat_mode)
 
+    @patch("app.accounts.views.req_gateway", side_effect=ValidationError("网关不可用"))
+    def test_work_mode_sync_failure_is_not_reported_as_success(self, gateway):
+        admin = User.objects.create_superuser(
+            username="work-mode-admin",
+            password="Strong-password-123!",
+        )
+        user = User.objects.create_user(
+            username="work-mode-target",
+            password="Strong-password-123!",
+            force_chat_mode=False,
+        )
+        request = self.factory.post(
+            "/0x/user/",
+            {
+                "username": user.username,
+                "is_active": True,
+                "isolated_session": True,
+                "gptcar_list": [],
+                "model_limit": [],
+                "remark": "",
+                "force_chat_mode": True,
+            },
+            format="json",
+        )
+        force_authenticate(request, user=admin)
+        response = UserAccountView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
+        user.refresh_from_db()
+        self.assertTrue(user.force_chat_mode)
+        gateway.assert_called_once_with(
+            "post",
+            "/api/user-work-mode",
+            json={"user_name": user.username, "force_chat_mode": True},
+        )
+
+    @patch("app.accounts.views.backup.req_gateway")
+    @patch("app.accounts.views.req_gateway")
+    @patch("app.accounts.views.cfg.req_gateway")
+    def test_staff_cannot_access_root_security_controls(
+        self, moderation_gateway, script_gateway, backup_gateway
+    ):
+        staff = User.objects.create_user(
+            username="limited-staff",
+            password="Strong-password-123!",
+            is_staff=True,
+        )
+        for path, view in [
+            ("/0x/user/political-moderation", PoliticalModerationConfigView),
+            ("/0x/user/custom-scripts", CustomScriptConfigView),
+            ("/0x/user/backup", UnifiedBackupView),
+        ]:
+            request = self.factory.get(path)
+            force_authenticate(request, user=staff)
+            self.assertEqual(view.as_view()(request).status_code, 403)
+        moderation_gateway.assert_not_called()
+        script_gateway.assert_not_called()
+        backup_gateway.assert_not_called()
+
+    @patch("app.accounts.views.req_gateway", return_value={"scripts": []})
+    def test_superuser_can_access_root_security_controls(self, gateway):
+        admin = User.objects.create_superuser(
+            username="root-security-admin",
+            password="Strong-password-123!",
+        )
+        request = self.factory.get("/0x/user/custom-scripts")
+        force_authenticate(request, user=admin)
+        self.assertEqual(CustomScriptConfigView.as_view()(request).status_code, 200)
+        gateway.assert_called_once_with("get", "/api/custom-scripts")
+
+    @patch("app.utils.requests.request")
+    def test_gateway_requests_have_connect_and_read_timeouts(self, request_call):
+        response = Mock(status_code=200)
+        response.json.return_value = {"ok": True}
+        request_call.return_value = response
+        with patch("app.utils.GATEWAY_CONNECT_TIMEOUT_SECONDS", 1.5), patch(
+            "app.utils.GATEWAY_READ_TIMEOUT_SECONDS", 2.5
+        ):
+            self.assertEqual(req_gateway("get", "/api/test"), {"ok": True})
+        self.assertEqual(request_call.call_args.kwargs["timeout"], (1.5, 2.5))
+
     def test_empty_account_pool_is_fail_closed(self):
         self.assertFalse(ChatgptAccount.get_by_gptcar_list([]).exists())
+
+    def test_admin_can_view_users_assigned_to_account_pool(self):
+        admin = User.objects.create_superuser(
+            username="pool-detail-admin",
+            password="Strong-password-123!",
+        )
+        car_one = ChatgptCar.objects.create(
+            car_name="pool-detail-one",
+            gpt_account_list=[],
+            created_time=1,
+            updated_time=1,
+        )
+        car_two = ChatgptCar.objects.create(
+            car_name="pool-detail-two",
+            gpt_account_list=[],
+            created_time=1,
+            updated_time=1,
+        )
+        User.objects.create_user(username="pool-user-one", gptcar_list=[car_one.id])
+        User.objects.create_user(username="pool-user-two", gptcar_list=[car_two.id])
+        User.objects.create_user(username="pool-user-both", gptcar_list=[car_one.id, car_two.id])
+
+        request = self.factory.get(f"/0x/chatgpt/car/{car_one.id}/detail")
+        force_authenticate(request, user=admin)
+        response = GptCarDetailView.as_view()(request, car_id=car_one.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["assigned_users"]), 2)
+        self.assertEqual(
+            {item["username"] for item in response.data["assigned_users"]},
+            {"pool-user-one", "pool-user-both"},
+        )
+        self.assertEqual(
+            {item["username"] for item in response.data["available_users"]},
+            {"pool-user-two"},
+        )
+
+        user_two = User.objects.get(username="pool-user-two")
+        request = self.factory.post(
+            f"/0x/chatgpt/car/{car_one.id}/users",
+            {"user_ids": [user_two.id]},
+            format="json",
+        )
+        force_authenticate(request, user=admin)
+        response = GptCarUserAssignmentView.as_view()(request, car_id=car_one.id)
+        user_two.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(car_one.id, user_two.gptcar_list)
+        self.assertIn(car_two.id, user_two.gptcar_list)
+
+        user_one = User.objects.get(username="pool-user-one")
+        request = self.factory.delete(
+            f"/0x/chatgpt/car/{car_one.id}/users",
+            {"user_ids": [user_one.id]},
+            format="json",
+        )
+        force_authenticate(request, user=admin)
+        response = GptCarUserAssignmentView.as_view()(request, car_id=car_one.id)
+        user_one.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(car_one.id, user_one.gptcar_list)
 
     def test_user_expired_date_can_be_assigned_and_cleared(self):
         admin = User.objects.create_superuser(
@@ -181,20 +326,86 @@ class SecurityRegressionTests(TestCase):
             "post", "/api/blocked-paths", json={"paths": ["pricing"]}
         )
 
-    @patch("app.accounts.views.login.req_gateway", return_value={"message": "退出成功"})
+    @patch("app.accounts.revocations.req_gateway", return_value={"revoked": True})
     def test_logout_revokes_drf_and_gateway_sessions(self, req_gateway):
         user = User.objects.create_user(username="logout-user", password="password-123")
         token = Token.objects.create(user=user)
         request = self.factory.post("/0x/user/logout", {}, format="json")
+        request.COOKIES[AUTH_COOKIE_NAME] = token.key
         force_authenticate(request, user=user, token=token)
-        response = AccountLogout.as_view()(request)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = AccountLogout.as_view()(request)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Token.objects.filter(key=token.key).exists())
-        req_gateway.assert_called_once_with(
-            "post",
-            "/api/logout",
-            json={"user_name": "logout-user"},
+        req_gateway.assert_called_once()
+        self.assertEqual(req_gateway.call_args.args, ("post", "/api/revoke-authorization"))
+        self.assertEqual(req_gateway.call_args.kwargs["json"]["subject"], "logout-user")
+        self.assertFalse(GatewayRevocation.objects.exists())
+
+    @patch("app.accounts.revocations.req_gateway", return_value={"revoked": True})
+    def test_admin_can_revoke_user_sessions(self, req_gateway):
+        admin = User.objects.create_superuser(
+            username="revoke-admin", password="Strong-password-123!"
         )
+        user = User.objects.create_user(
+            username="revoke-user", password="Strong-password-123!"
+        )
+        token = Token.objects.create(user=user)
+        request = self.factory.post(
+            "/0x/user/revoke-sessions", {"user_id": user.id}, format="json"
+        )
+        force_authenticate(request, user=admin)
+        req_gateway.side_effect = lambda *_args, **_kwargs: (
+            self.assertFalse(Token.objects.filter(key=token.key).exists())
+            or {"revoked": True}
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = UserSessionRevokeView.as_view()(request)
+        # TestCase's outer transaction defers delivery until the captured commit.
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Token.objects.filter(key=token.key).exists())
+        req_gateway.assert_called_once()
+        self.assertEqual(req_gateway.call_args.args, ("post", "/api/revoke-authorization"))
+        self.assertEqual(req_gateway.call_args.kwargs["json"]["subject"], "revoke-user")
+        self.assertFalse(GatewayRevocation.objects.exists())
+
+    @patch("app.accounts.revocations.req_gateway", side_effect=ValidationError("网关不可用"))
+    def test_revoke_sessions_removes_drf_token_when_gateway_revoke_fails(self, _req_gateway):
+        admin = User.objects.create_superuser(
+            username="revoke-failure-admin", password="Strong-password-123!"
+        )
+        user = User.objects.create_user(
+            username="revoke-failure-user", password="Strong-password-123!"
+        )
+        token = Token.objects.create(user=user)
+        request = self.factory.post(
+            "/0x/user/revoke-sessions", {"user_id": user.id}, format="json"
+        )
+        force_authenticate(request, user=admin)
+
+        response = UserSessionRevokeView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Token.objects.filter(key=token.key).exists())
+
+    @patch("app.accounts.views.req_gateway")
+    def test_normal_user_cannot_revoke_sessions(self, req_gateway):
+        user = User.objects.create_user(
+            username="revoke-normal-user", password="Strong-password-123!"
+        )
+        target = User.objects.create_user(
+            username="revoke-target-user", password="Strong-password-123!"
+        )
+        request = self.factory.post(
+            "/0x/user/revoke-sessions", {"user_id": target.id}, format="json"
+        )
+        force_authenticate(request, user=user)
+
+        response = UserSessionRevokeView.as_view()(request)
+
+        self.assertEqual(response.status_code, 403)
+        req_gateway.assert_not_called()
 
     def test_stale_auth_cookie_does_not_block_public_login_with_csrf_403(self):
         user = User.objects.create_user(username="stale-login", password="Strong-password-123!")
@@ -215,6 +426,7 @@ class SecurityRegressionTests(TestCase):
     def test_admin_login_issues_csrf_cookie_for_unsafe_api_requests(self):
         User.objects.create_superuser(username="csrf-admin", password="Strong-password-123!")
         client = APIClient(enforce_csrf_checks=True)
+        csrf = client.get("/0x/user/version-cfg").data["csrf_token"]
 
         login = client.post(
             "/0x/user/login",
@@ -223,7 +435,11 @@ class SecurityRegressionTests(TestCase):
             HTTP_USER_AGENT="security-regression-test",
             HTTP_ORIGIN="https://mirror.example",
             HTTP_X_FORWARDED_PROTO="https",
+            HTTP_X_CSRFTOKEN=csrf,
         )
+        self.assertEqual(login.status_code, 200)
+        login = client.post("/0x/user/login-confirm", {"login_ticket": login.data["login_ticket"]},
+                            format="json", HTTP_X_CSRFTOKEN=csrf, HTTP_USER_AGENT="security-regression-test")
         self.assertEqual(login.status_code, 200)
         self.assertIn("csrftoken", login.cookies)
         self.assertTrue(login.data["csrf_token"])
@@ -268,6 +484,7 @@ class SecurityRegressionTests(TestCase):
     def test_allow_all_origins_accepts_unlisted_origin_with_csrf_token(self):
         User.objects.create_superuser(username="open-origin-admin", password="Strong-password-123!")
         client = APIClient(enforce_csrf_checks=True)
+        csrf = client.get("/0x/user/version-cfg").data["csrf_token"]
 
         login = client.post(
             "/0x/user/login",
@@ -276,7 +493,11 @@ class SecurityRegressionTests(TestCase):
             HTTP_USER_AGENT="security-regression-test",
             HTTP_ORIGIN="https://unlisted.example",
             HTTP_X_FORWARDED_PROTO="https",
+            HTTP_X_CSRFTOKEN=csrf,
         )
+        self.assertEqual(login.status_code, 200)
+        login = client.post("/0x/user/login-confirm", {"login_ticket": login.data["login_ticket"]},
+                            format="json", HTTP_X_CSRFTOKEN=csrf, HTTP_USER_AGENT="security-regression-test")
         self.assertEqual(login.status_code, 200)
 
         response = client.post(
@@ -293,9 +514,14 @@ class SecurityRegressionTests(TestCase):
     @patch("app.accounts.views.login.save_visit_log")
     def test_free_login_keeps_shared_token_but_rotates_visitor_subject(self, _save_visit_log):
         User.objects.create_user(username=FREE_ACCOUNT_USERNAME, password="password-123")
-        view = UserFreeLoginView.as_view()
-        first = view(self.factory.post("/0x/user/login-free", {}, format="json"))
-        second = view(self.factory.post("/0x/user/login-free", {}, format="json"))
+        results = []
+        for _ in range(2):
+            client = APIClient(enforce_csrf_checks=True)
+            csrf = client.get("/0x/user/version-cfg").data["csrf_token"]
+            prepared = client.post("/0x/user/login-free", {}, format="json", HTTP_X_CSRFTOKEN=csrf)
+            results.append(client.post("/0x/user/login-confirm", {"login_ticket": prepared.data["login_ticket"]},
+                                       format="json", HTTP_X_CSRFTOKEN=csrf))
+        first, second = results
         self.assertNotIn("admin_token", first.data)
         self.assertEqual(
             first.cookies[AUTH_COOKIE_NAME].value,
@@ -314,16 +540,17 @@ class SecurityRegressionTests(TestCase):
         token = Token.objects.create(user=user)
         Token.objects.filter(pk=token.pk).update(created=timezone.now() - timedelta(seconds=61))
         token.refresh_from_db()
-        with patch("app.utils.req_gateway") as req_gateway:
-            with self.assertRaises(Exception):
+        with patch("app.accounts.revocations.req_gateway") as req_gateway:
+            with self.captureOnCommitCallbacks(execute=True), self.assertRaises(Exception):
                 request = self.factory.get(
                     "/0x/user/me",
                     HTTP_AUTHORIZATION=f"Token {token.key}",
                 )
                 ExpiringCookieTokenAuthentication().authenticate(request)
-            req_gateway.assert_called_once_with(
-                "post", "/api/logout", json={"user_name": user.username}
-            )
+            # The grant is already expired; the gateway lease cannot outlive it.
+            req_gateway.assert_not_called()
+            self.assertFalse(Token.objects.filter(user=user).exists())
+            self.assertFalse(GatewayRevocation.objects.filter(subject=user.username).exists())
 
     @patch("app.accounts.views.login.req_gateway")
     @patch("app.accounts.views.login.ALLOW_REGISTER", True)
@@ -551,6 +778,8 @@ class SecurityRegressionTests(TestCase):
         post.return_value.json.return_value = {
             "success": True,
             "action": "login",
+            "challenge_ts": timezone.now().isoformat(),
+            "hostname": "mirror.example.com",
         }
         request = self.factory.post(
             "/0x/user/login",
@@ -562,6 +791,7 @@ class SecurityRegressionTests(TestCase):
         verify_turnstile(request, "login")
 
         post.assert_called_once()
+        post.return_value.raise_for_status.assert_called_once()
         self.assertEqual(post.call_args.kwargs["data"]["secret"], "test-secret")
         self.assertEqual(post.call_args.kwargs["data"]["response"], "test-token")
 
@@ -579,6 +809,46 @@ class SecurityRegressionTests(TestCase):
             format="json",
         )
         request.data = {"turnstile_token": "test-token"}
+
+        with self.assertRaises(ValidationError):
+            verify_turnstile(request, "login")
+
+    @patch("app.accounts.views.login.TURNSTILE_SECRET_KEY", "test-secret")
+    @patch("app.accounts.views.login.TURNSTILE_ENABLED", True)
+    @patch("app.accounts.views.login.requests.post")
+    def test_turnstile_rejects_expired_token(self, post):
+        post.return_value.json.return_value = {
+            "success": True,
+            "action": "login",
+            "challenge_ts": (timezone.now() - timedelta(seconds=301)).isoformat(),
+            "hostname": "mirror.example.com",
+        }
+        request = self.factory.post(
+            "/0x/user/login",
+            {"turnstile_token": "expired-token"},
+            format="json",
+        )
+        request.data = {"turnstile_token": "expired-token"}
+
+        with self.assertRaises(ValidationError):
+            verify_turnstile(request, "login")
+
+    @patch("app.accounts.views.login.TURNSTILE_SECRET_KEY", "test-secret")
+    @patch("app.accounts.views.login.TURNSTILE_ENABLED", True)
+    @patch("app.accounts.views.login.requests.post")
+    def test_turnstile_requires_boolean_success(self, post):
+        post.return_value.json.return_value = {
+            "success": "true",
+            "action": "login",
+            "challenge_ts": timezone.now().isoformat(),
+            "hostname": "mirror.example.com",
+        }
+        request = self.factory.post(
+            "/0x/user/login",
+            {"turnstile_token": "malformed-token"},
+            format="json",
+        )
+        request.data = {"turnstile_token": "malformed-token"}
 
         with self.assertRaises(ValidationError):
             verify_turnstile(request, "login")

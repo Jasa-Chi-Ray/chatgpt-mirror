@@ -14,6 +14,8 @@ class UserAdmin(admin.ModelAdmin):
         "is_active",
         "username",
         "isolated_session",
+        "mcp_isolation",
+        "skills_isolation",
         "remark",
         "last_login",
     )

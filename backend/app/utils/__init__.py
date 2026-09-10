@@ -3,15 +3,22 @@ import ipaddress
 import json
 import time
 import uuid
+from datetime import timedelta
 
 import requests
 from django.core import signing
 from django.core.signing import BadSignature, SignatureExpired
+from django.utils import timezone
 from requests.exceptions import RequestException
 from rest_framework.exceptions import ValidationError
 
 from app.accounts.models import VisitLog
-from app.settings import CHATGPT_GATEWAY_URL, FREE_ACCOUNT_USERNAME
+from app.settings import (
+    CHATGPT_GATEWAY_URL,
+    FREE_ACCOUNT_USERNAME,
+    GATEWAY_CONNECT_TIMEOUT_SECONDS,
+    GATEWAY_READ_TIMEOUT_SECONDS,
+)
 from app.settings import GATEWAY_ADMIN_SECRET
 
 FREE_SESSION_SALT = "chatgpt-mirror.free-session.v1"
@@ -45,7 +52,14 @@ def get_client_ip(request):
 
 
 def issue_free_session():
-    return signing.dumps({"sid": uuid.uuid4().hex}, salt=FREE_SESSION_SALT, compress=True)
+    from app.accounts.models import User, VisitorSession
+
+    sid = uuid.uuid4().hex
+    VisitorSession.objects.create(
+        sid=sid, user=User.objects.get(username=FREE_ACCOUNT_USERNAME),
+        expires_at=timezone.now() + timedelta(seconds=FREE_SESSION_MAX_AGE),
+    )
+    return signing.dumps({"sid": sid}, salt=FREE_SESSION_SALT, compress=True)
 
 
 def get_request_subject(request):
@@ -65,6 +79,11 @@ def get_request_subject(request):
     sid = str(payload.get("sid", "")).strip()
     if len(sid) != 32 or not all(char in "0123456789abcdef" for char in sid):
         raise ValidationError({"message": "免费访客会话无效"})
+    from app.accounts.models import VisitorSession
+    if not VisitorSession.objects.filter(
+        sid=sid, user=request.user, expires_at__gt=timezone.now(),
+    ).exists():
+        raise ValidationError({"message": "免费访客会话已撤销，请重新进入"})
     return f"{FREE_ACCOUNT_USERNAME}:{sid}"
 
 def req_gateway(method, uri, *args, **kwargs):
@@ -73,6 +92,11 @@ def req_gateway(method, uri, *args, **kwargs):
         "Authorization": "Bearer {}".format(GATEWAY_ADMIN_SECRET),
     }
     try:
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = (
+                GATEWAY_CONNECT_TIMEOUT_SECONDS,
+                GATEWAY_READ_TIMEOUT_SECONDS,
+            )
         res = requests.request(method, url, headers=headers, *args, **kwargs, allow_redirects=False)
     except RequestException as e:
         raise ValidationError("请求异常, 网关服务未正常启用")

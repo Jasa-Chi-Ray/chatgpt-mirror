@@ -1,14 +1,28 @@
 from django.contrib.auth.models import AbstractUser, AbstractBaseUser
-from django.db import models
+import uuid
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
 from app.chatgpt.models import ChatgptAccount
 
 
 class User(AbstractUser):
+    authorization_version = models.UUIDField(default=uuid.uuid4, editable=False)
+
+    def save(self, *args, **kwargs):
+        # Persist the permission change and its revocation outbox entry together.
+        with transaction.atomic():
+            return super().save(*args, **kwargs)
+
     model_limit = models.JSONField(default=list, verbose_name="备注")
     remark = models.TextField(blank=True, verbose_name="备注")
     isolated_session = models.BooleanField(default=True, verbose_name="独立回话")
+    mcp_isolation = models.BooleanField(default=True, verbose_name="MCP 隔离")
+    skills_isolation = models.BooleanField(default=True, verbose_name="Skills 隔离")
+    capability_account_id = models.PositiveIntegerField(blank=True, null=True)
+    capability_policy_initialized = models.BooleanField(default=False)
+    mcp_allowlist = models.JSONField(default=list)
+    skills_allowlist = models.JSONField(default=list)
     gptcar_list = models.JSONField(default=list)
     expired_date = models.DateField(blank=True, null=True, verbose_name="过期日期")
     daily_quota = models.PositiveIntegerField(default=0, verbose_name="每日配额")
@@ -18,6 +32,33 @@ class User(AbstractUser):
         default=False,
         verbose_name="允许管理员查看对话标题",
     )
+
+
+class VisitorSession(models.Model):
+    sid = models.CharField(max_length=32, primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    expires_at = models.DateTimeField(db_index=True)
+
+
+class GatewayRevocation(models.Model):
+    subject = models.CharField(max_length=200)
+    version = models.CharField(max_length=64)
+    include_visitors = models.BooleanField(default=False)
+    expires_at = models.DateTimeField()
+    next_attempt_at = models.DateTimeField(default=timezone.now, db_index=True)
+    attempts = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("subject", "version"), name="unique_gateway_revocation")]
+
+
+class PendingLogin(models.Model):
+    digest = models.CharField(max_length=64, primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    password_digest = models.CharField(max_length=64)
+    csrf_digest = models.CharField(max_length=64)
+    expires_at = models.DateTimeField(db_index=True)
+    visitor = models.BooleanField(default=False)
 
 
 class Announcement(models.Model):

@@ -5,7 +5,14 @@
         <div class="sidebar-title">
           管理
         </div>
-        <t-menu class="nav-menu" :value="activeMenu" theme="light" @change="handleMenuChange">
+        <t-menu
+          class="nav-menu"
+          :value="activeMenu"
+          :collapsed="isSidebarCollapsed"
+          :width="['232px', '100%']"
+          theme="light"
+          @change="handleMenuChange"
+        >
           <t-menu-item v-if="userStore.isAdmin" value="/account/overview">
             <template #icon><t-icon name="dashboard" /></template>
             <span class="menu-label">运维概览</span>
@@ -46,7 +53,7 @@
             <template #icon><t-icon name="secured" /></template>
             <span class="menu-label">政治内容屏蔽</span>
           </t-menu-item>
-          <t-menu-item value="/account/profile">
+          <t-menu-item v-if="!userStore.isAdmin" value="/account/profile">
             <template #icon><t-icon name="user-circle" /></template>
             <span class="menu-label">账户中心</span>
           </t-menu-item>
@@ -76,35 +83,60 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const isSidebarCollapsed = ref(false)
+
+let sidebarMediaQuery: MediaQueryList | null = null
+
+const syncSidebarState = (event?: MediaQueryListEvent) => {
+  isSidebarCollapsed.value = event?.matches ?? sidebarMediaQuery?.matches ?? false
+}
+
+onMounted(() => {
+  sidebarMediaQuery = window.matchMedia('(max-width: 900px)')
+  syncSidebarState()
+  sidebarMediaQuery.addEventListener('change', syncSidebarState)
+})
+
+onBeforeUnmount(() => {
+  sidebarMediaQuery?.removeEventListener('change', syncSidebarState)
+})
 
 const activeMenu = computed(() => route.path)
 const username = computed(() => userStore.username || '管理员')
 const pageTitle = computed(() => String(route.meta.title || '管理'))
 
-const userOptions = [
-  { content: '账户中心', value: 'profile' },
-  { content: '退出登录', value: 'logout' }
-]
+const userOptions = computed(() => {
+  const options = [{ content: '退出登录', value: 'logout' }]
+  if (!userStore.isAdmin) {
+    options.unshift({ content: '账户中心', value: 'profile' })
+  }
+  return options
+})
 
 const handleMenuChange = (value: string) => {
   router.push(value)
 }
 
-const handleUserAction = (data: { value: string }) => {
+const handleUserAction = async (data: { value: string }) => {
   if (data.value === 'profile') {
     router.push('/account/profile')
     return
   }
   if (data.value === 'logout') {
-    userStore.logout()
-    router.push('/login')
+    try {
+      await userStore.logout()
+      await router.replace('/login')
+    } catch (error: any) {
+      const { MessagePlugin } = await import('tdesign-vue-next')
+      MessagePlugin.error(error.message || '退出未完成，请重试')
+    }
   }
 }
 </script>
@@ -143,6 +175,8 @@ const handleUserAction = (data: { value: string }) => {
 }
 
 .nav-menu {
+  width: 100% !important;
+  box-sizing: border-box;
   padding: 12px 10px;
   background: transparent;
 }

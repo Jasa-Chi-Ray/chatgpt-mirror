@@ -4,7 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authentication import get_authorization_header
-from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, ValidationError
 
 from app.security import ConfigurableCsrfViewMiddleware
 
@@ -31,18 +31,21 @@ class ExpiringCookieTokenAuthentication(TokenAuthentication):
         else:
             return None
 
+        if result is None:
+            return None
         user, token = result
         expires_at = token.created + timedelta(seconds=settings.API_TOKEN_TTL_SECONDS)
         expired_account = user.expired_date and user.expired_date <= timezone.localdate()
         if timezone.now() >= expires_at or not user.is_active or expired_account:
             type(token).objects.filter(user=user).delete()
-            try:
-                from app.utils import req_gateway
-
-                req_gateway("post", "/api/logout", json={"user_name": user.username})
-            except Exception:
-                pass
             raise AuthenticationFailed("登录已过期，请重新登录")
+        if user.username == settings.FREE_ACCOUNT_USERNAME:
+            from app.utils import get_request_subject
+            request.user = user
+            try:
+                get_request_subject(request)
+            except ValidationError:
+                raise AuthenticationFailed("免费访客会话已失效，请重新进入")
         return user, token
 
     @staticmethod

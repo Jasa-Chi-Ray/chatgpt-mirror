@@ -23,5 +23,8 @@
     "typescript": "5.4.5",
     "vite": "^5.0.0",
     "vue-tsc": "^1.8.0"
+  },
+  "overrides": {
+    "esbuild": "0.25.12"
   }
 }

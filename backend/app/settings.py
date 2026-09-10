@@ -22,7 +22,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-DJANGO_ENV = os.environ.get("DJANGO_ENV", "LOCAL").upper()
+DJANGO_ENV = os.environ.get("DJANGO_ENV", "PRODUCTION").upper()
+if DJANGO_ENV not in {"LOCAL", "PRODUCTION"}:
+    raise RuntimeError("DJANGO_ENV must be LOCAL or PRODUCTION")
 
 
 def env_bool(key: str, default: bool) -> bool:
@@ -197,6 +199,8 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {
         "login_ip": "20/min",
+        "login_confirm": "20/min",
+        "login_bootstrap": "60/min",
         "login_account": "10/min",
         "expensive_user": "30/min",
         "user": "120/min",
@@ -204,6 +208,10 @@ REST_FRAMEWORK = {
 }
 
 API_TOKEN_TTL_SECONDS = int(os.environ.get("API_TOKEN_TTL_SECONDS", str(7 * 24 * 60 * 60)))
+GATEWAY_CONNECT_TIMEOUT_SECONDS = float(os.environ.get("GATEWAY_CONNECT_TIMEOUT_SECONDS", "5"))
+GATEWAY_READ_TIMEOUT_SECONDS = float(os.environ.get("GATEWAY_READ_TIMEOUT_SECONDS", "60"))
+if GATEWAY_CONNECT_TIMEOUT_SECONDS <= 0 or GATEWAY_READ_TIMEOUT_SECONDS <= 0:
+    raise RuntimeError("Gateway HTTP timeouts must be greater than zero")
 
 ROOT_URLCONF = "app.urls"
 

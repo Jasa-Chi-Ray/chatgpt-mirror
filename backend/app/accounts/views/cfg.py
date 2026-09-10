@@ -1,15 +1,25 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from django.middleware.csrf import get_token
 
+from app.permissions import IsSuperUser
 from app.settings import SHOW_GITHUB, TURNSTILE_ENABLED, TURNSTILE_SITE_KEY
 from app.utils import req_gateway
+from app.accounts.views.login import LoginIpRateThrottle
+
+
+class LoginBootstrapThrottle(LoginIpRateThrottle):
+    scope = "login_bootstrap"
 
 
 class VersionConfig(APIView):
+    authentication_classes = ()
+    throttle_classes = (LoginBootstrapThrottle,)
 
     def get(self, request):
         return Response({
+            'csrf_token': get_token(request),
             'show_github': SHOW_GITHUB,
             'turnstile_enabled': TURNSTILE_ENABLED,
             'turnstile_site_key': TURNSTILE_SITE_KEY if TURNSTILE_ENABLED else '',
@@ -30,7 +40,7 @@ class AccessControlView(APIView):
 
 
 class PoliticalModerationConfigView(APIView):
-    permission_classes = (IsAuthenticated, IsAdminUser)
+    permission_classes = (IsAuthenticated, IsSuperUser)
 
     @staticmethod
     def payload(request, force_enabled=None):

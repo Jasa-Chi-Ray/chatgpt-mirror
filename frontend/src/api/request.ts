@@ -82,8 +82,8 @@ const request = async (url: string, method = 'GET', body?: any) => {
     }
 
     if (response.status === 401) {
-      userStore.logout()
-      router.push('/login')
+      await userStore.logout()
+      await router.replace('/login')
       return null
     }
 

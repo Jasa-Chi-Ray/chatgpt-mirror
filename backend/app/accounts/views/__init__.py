@@ -9,25 +9,29 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from app.accounts.models import User, VisitLog
+from app.accounts.models import User, VisitLog, PendingLogin, VisitorSession
+from app.accounts.session_authority import gateway_authorization, capability_aliases
 from app.accounts.serializers import ShowVisitLogModelSerializer, AddUserAccountSerializer, UserBindChatGPTSerializer, \
     ShowUserAccountModelSerializer, BatchModelLimitSerializer, BatchUserActionSerializer, ChangePasswordSerializer
 from app.accounts.serializers import ConversationTitlePrivacySerializer
+from app.accounts.serializers import UserCapabilityPolicySerializer
 from app.accounts.authentication import set_auth_cookie
 from rest_framework.authtoken.models import Token
 from app.chatgpt.models import ChatgptAccount
 from app.page import DefaultPageNumberPagination
+from app.permissions import IsSuperUser
 from app.settings import ADMIN_USERNAME
 from app.utils import get_request_subject, req_gateway
 from app.accounts.views.login import issue_user_token
 
 
-def revoke_user_sessions(user):
+def revoke_user_sessions(user, *, require_gateway=False):
     Token.objects.filter(user=user).delete()
-    try:
-        req_gateway("post", "/api/logout", json={"user_name": user.username})
-    except ValidationError:
-        pass
+    PendingLogin.objects.filter(user=user).delete()
+    VisitorSession.objects.filter(user=user).delete()
+    from app.accounts.models import GatewayRevocation
+    if require_gateway and GatewayRevocation.objects.filter(subject=user.username).exists():
+        raise ValidationError("会话已在管理端撤销，网关通知正在自动重试；旧授权最迟在 60 分钟内失效")
 
 
 def quota_snapshot(user):
@@ -74,9 +78,14 @@ class GetMirrorToken(APIView):
         chatgpt_username_list = [i.chatgpt_username for i in user_gpt_list]
         res = req_gateway("post", "/api/get-mirror-token", json={
             "isolated_session": user.isolated_session,
+            "mcp_isolation": user.mcp_isolation and user.capability_policy_initialized,
+            "skills_isolation": user.skills_isolation and user.capability_policy_initialized,
+            "mcp_allowed_ids": capability_aliases(user, "mcp_allowlist"),
+            "skills_allowed_ids": capability_aliases(user, "skills_allowlist"),
             "limits": normalized_model_limits(user),
             "chatgpt_list": chatgpt_username_list,
             "user_name": get_request_subject(request),
+            "authorization": gateway_authorization(request),
             "daily_quota": user.daily_quota,
             "monthly_quota": user.monthly_quota,
             "force_chat_mode": user.force_chat_mode,
@@ -117,7 +126,7 @@ class UserChatGPTAccountList(APIView):
                 "access_token_valid": line.access_token_valid,
                 "session_token_valid": line.session_token_valid,
                 "supported_login_modes": supported_login_modes,
-                "default_login_mode": "api",
+                "default_login_mode": "api" if line.access_token_valid else "web",
             })
 
         return Response({"results": results})
@@ -129,12 +138,14 @@ class BatchModelLimit(APIView):
     def post(self, request):
         serializer = BatchModelLimitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        User.objects.filter(id__in=serializer.data["user_id_list"]).update(model_limit=serializer.data["model_limit"])
+        for user in User.objects.filter(id__in=serializer.data["user_id_list"]):
+            user.model_limit = serializer.data["model_limit"]
+            user.save(update_fields=["model_limit"])
         return Response({"message": "更新成功"})
 
 
 class MirrorProxyConfigView(APIView):
-    permission_classes = (IsAuthenticated, IsAdminUser)
+    permission_classes = (IsAuthenticated, IsSuperUser)
 
     def get(self, request):
         return Response(req_gateway("get", "/api/mirror-proxy-config"))
@@ -154,7 +165,7 @@ class MirrorProxyConfigView(APIView):
 
 
 class MirrorProxyTestView(APIView):
-    permission_classes = (IsAuthenticated, IsAdminUser)
+    permission_classes = (IsAuthenticated, IsSuperUser)
 
     def post(self, request):
         enabled = request.data.get("enabled")
@@ -171,7 +182,7 @@ class MirrorProxyTestView(APIView):
 
 
 class CustomScriptConfigView(APIView):
-    permission_classes = (IsAuthenticated, IsAdminUser)
+    permission_classes = (IsAuthenticated, IsSuperUser)
 
     def get(self, request):
         return Response(req_gateway("get", "/api/custom-scripts"))
@@ -257,6 +268,8 @@ class UserAccountView(generics.ListCreateAPIView):
         user.is_active = data["is_active"]
         user.model_limit = data["model_limit"]
         user.isolated_session = data["isolated_session"]
+        user.mcp_isolation = data.get("mcp_isolation", True)
+        user.skills_isolation = data.get("skills_isolation", True)
         user.remark = data["remark"]
         user.daily_quota = data.get("daily_quota", 0)
         user.monthly_quota = data.get("monthly_quota", 0)
@@ -265,13 +278,10 @@ class UserAccountView(generics.ListCreateAPIView):
         user.save()
 
         if "force_chat_mode" in data:
-            try:
-                req_gateway("post", "/api/user-work-mode", json={
-                    "user_name": user.username,
-                    "force_chat_mode": user.force_chat_mode,
-                })
-            except ValidationError:
-                pass
+            req_gateway("post", "/api/user-work-mode", json={
+                "user_name": user.username,
+                "force_chat_mode": user.force_chat_mode,
+            })
 
         credentials_changed = bool(data.get("password"))
         access_revoked = not user.is_active or (
@@ -288,6 +298,133 @@ class UserAccountView(generics.ListCreateAPIView):
             raise ValidationError({"message": "不能删除管理员账号"})
         User.objects.filter(username=username).delete()
         return Response({"message": "删除成功"})
+
+
+def _user_capability_account(user, account_id):
+    account = ChatgptAccount.get_by_gptcar_list(user.gptcar_list).filter(id=account_id).first()
+    if not account:
+        raise ValidationError({"account_id": "该上游账号不属于此用户当前绑定的账号池"})
+    return account
+
+
+def _capability_grants(items, selected_ids):
+    selected = {str(item).strip() for item in selected_ids if str(item).strip()}
+    grants = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id") or "").strip()
+        if not item_id or item_id not in selected:
+            continue
+        aliases = []
+        for value in item.get("aliases") or []:
+            value = str(value or "").strip()
+            if value and value != item_id and value not in aliases:
+                aliases.append(value)
+        grants.append({"id": item_id, "aliases": aliases[:12]})
+    return grants
+
+
+class UserCapabilityPolicyView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminUser)
+
+    def _user(self, user_id):
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            raise ValidationError({"user_id": "用户不存在"})
+        return user
+
+    def _accounts(self, user):
+        return [
+            {"id": item.id, "label": f"{item.chatgpt_username} · {item.plan_type}"}
+            for item in ChatgptAccount.get_by_gptcar_list(user.gptcar_list)
+        ]
+
+    def _discover(self, user, account):
+        result = req_gateway("post", "/api/account-capabilities", json={
+            "chatgpt_username": account.chatgpt_username,
+            "access_token": account.access_token,
+            "session_token": account.session_token,
+            "extra_cookies": account.extra_cookies,
+            "proxy_node_id": account.proxy_node_id,
+        })
+        if not isinstance(result, dict):
+            raise ValidationError("网关返回的能力清单无效")
+        return {
+            "mcp": [item for item in result.get("mcp", []) if isinstance(item, dict)],
+            "skills": [item for item in result.get("skills", []) if isinstance(item, dict)],
+        }
+
+    def get(self, request, user_id):
+        user = self._user(user_id)
+        accounts = self._accounts(user)
+        account_id = request.query_params.get("account_id")
+        if not account_id:
+            return Response({
+                "accounts": accounts,
+                "selected_account_id": user.capability_account_id,
+                "initialized": user.capability_policy_initialized,
+                "mcp": [],
+                "skills": [],
+            })
+        try:
+            account_id = int(account_id)
+        except (TypeError, ValueError):
+            raise ValidationError({"account_id": "账号 ID 无效"})
+        account = _user_capability_account(user, account_id)
+        inventory = self._discover(user, account)
+        reset_defaults = not user.capability_policy_initialized or user.capability_account_id != account.id
+        mcp_allowed = {item.get("id") for item in user.mcp_allowlist if isinstance(item, dict)}
+        skills_allowed = {item.get("id") for item in user.skills_allowlist if isinstance(item, dict)}
+        for item in inventory["mcp"]:
+            item["enabled"] = reset_defaults or item.get("id") in mcp_allowed
+        for item in inventory["skills"]:
+            item["enabled"] = reset_defaults or item.get("id") in skills_allowed
+        return Response({
+            "accounts": accounts,
+            "selected_account_id": account.id,
+            "initialized": user.capability_policy_initialized and not reset_defaults,
+            **inventory,
+        })
+
+    def post(self, request, user_id):
+        user = self._user(user_id)
+        serializer = UserCapabilityPolicySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        account = _user_capability_account(user, serializer.validated_data["account_id"])
+        inventory = self._discover(user, account)
+        user.capability_account_id = account.id
+        user.capability_policy_initialized = True
+        user.mcp_allowlist = _capability_grants(
+            inventory["mcp"], serializer.validated_data["mcp_allowed_ids"]
+        )
+        user.skills_allowlist = _capability_grants(
+            inventory["skills"], serializer.validated_data["skills_allowed_ids"]
+        )
+        user.save(update_fields=[
+            "capability_account_id", "capability_policy_initialized",
+            "mcp_allowlist", "skills_allowlist",
+        ])
+        return Response({"message": "MCP 与 Skills 权限已保存，用户现有会话已撤销"})
+
+class UserSessionRevokeView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminUser)
+
+    def post(self, request):
+        user_id = request.data.get("user_id")
+        if isinstance(user_id, bool):
+            raise ValidationError({"user_id": "用户 ID 无效"})
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            raise ValidationError({"user_id": "用户 ID 无效"})
+
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            raise ValidationError({"user_id": "用户不存在"})
+
+        revoke_user_sessions(user, require_gateway=True)
+        return Response({"message": "会话已撤销，用户将返回登录页面"})
 
 
 class VisitLogView(generics.ListAPIView):
@@ -342,7 +479,10 @@ class BatchUserActionView(APIView):
             changed, _ = queryset.delete()
         else:
             active = action == "activate"
-            changed = queryset.update(is_active=active)
+            changed = len(users)
+            for user in users:
+                user.is_active = active
+                user.save(update_fields=["is_active"])
             if not active:
                 for user in users:
                     revoke_user_sessions(user)

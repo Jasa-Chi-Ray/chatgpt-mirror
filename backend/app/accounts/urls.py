@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 from django.urls import path
-from django.views.decorators.csrf import csrf_exempt
 
 from app.accounts.views import UserAccountView, UserRelateGPTCarView, VisitLogView, BatchModelLimit, \
     UserChatGPTAccountList, GetMirrorToken, MirrorProxyConfigView, MirrorProxyTestView, CustomScriptConfigView
 from app.accounts.views import BatchUserActionView, CurrentUserView, ChangePasswordView, QuotaView, OperationsOverviewView
-from app.accounts.views import ConversationTitlePrivacyView, UserConversationStatisticsView
-from app.accounts.views.login import AccountLogin, AccountLogout, UserFreeLoginView, AccountRegister
+from app.accounts.views import ConversationTitlePrivacyView, UserConversationStatisticsView, UserSessionRevokeView
+from app.accounts.views import UserCapabilityPolicyView
+from app.accounts.views.login import AccountLogin, AccountLogout, UserFreeLoginView, AccountRegister, ConfirmLogin
+from app.accounts.session_authority import GatewayAuthorizationView
 from app.accounts.views.cfg import VersionConfig, AccessControlView, PoliticalModerationConfigView, PoliticalModerationTestView
 from app.accounts.views.backup import UnifiedBackupView
 from app.accounts.views.announcements import AnnouncementAdminView, CurrentAnnouncementView
@@ -23,7 +24,9 @@ urlpatterns = [
     path("proxy-config/test", MirrorProxyTestView.as_view()),
     path("custom-scripts", CustomScriptConfigView.as_view()),
     path("relat-gptcar", UserRelateGPTCarView.as_view()),
-    path("login", csrf_exempt(AccountLogin.as_view())),
+    path("login", AccountLogin.as_view()),
+    path("login-confirm", ConfirmLogin.as_view()),
+    path("gateway-authorization", GatewayAuthorizationView.as_view()),
     path("logout", AccountLogout.as_view()),
     path("visit-log", VisitLogView.as_view()),
     path("access-control", AccessControlView.as_view()),
@@ -35,6 +38,8 @@ urlpatterns = [
     path("conversation-statistics/<int:user_id>", UserConversationStatisticsView.as_view()),
     path("quota", QuotaView.as_view()),
     path("overview", OperationsOverviewView.as_view()),
+    path("revoke-sessions", UserSessionRevokeView.as_view()),
+    path("<int:user_id>/mcp-skills", UserCapabilityPolicyView.as_view()),
     path("batch", BatchUserActionView.as_view()),
     path("backup", UnifiedBackupView.as_view()),
     path("announcements", AnnouncementAdminView.as_view()),

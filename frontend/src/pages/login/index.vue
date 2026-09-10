@@ -70,7 +70,7 @@
               type="submit"
               size="large"
               class="login-button"
-              :disabled="turnstileEnabled && !turnstileToken"
+              :disabled="loading || (turnstileEnabled && !turnstileToken)"
             >
               {{ isRegister ? '创建账户' : '登录' }}
             </t-button>
@@ -138,6 +138,7 @@ const turnstileContainer = ref<HTMLElement | null>(null)
 const turnstileToken = ref('')
 const turnstileError = ref('')
 const turnstileWidgetId = ref<string | null>(null)
+let turnstileInvalidationRevision = 0
 
 const loginForm = reactive({
   username: '',
@@ -164,12 +165,10 @@ const loadTurnstileScript = () => {
   if (window.turnstile) return Promise.resolve()
   if (turnstileScriptPromise) return turnstileScriptPromise
 
-  turnstileScriptPromise = new Promise((resolve, reject) => {
+  turnstileScriptPromise = new Promise<void>((resolve, reject) => {
     const existingScript = document.querySelector<HTMLScriptElement>('script[data-turnstile-script]')
     if (existingScript) {
-      existingScript.addEventListener('load', () => resolve(), { once: true })
-      existingScript.addEventListener('error', () => reject(new Error('load failed')), { once: true })
-      return
+      existingScript.remove()
     }
 
     const script = document.createElement('script')
@@ -180,24 +179,21 @@ const loadTurnstileScript = () => {
     script.onload = () => resolve()
     script.onerror = () => reject(new Error('load failed'))
     document.head.appendChild(script)
+  }).catch((error) => {
+    turnstileScriptPromise = null
+    throw error
   })
 
   return turnstileScriptPromise
 }
 
 const removeTurnstile = () => {
+  turnstileInvalidationRevision += 1
   if (turnstileWidgetId.value && window.turnstile) {
     window.turnstile.remove(turnstileWidgetId.value)
   }
   turnstileWidgetId.value = null
   turnstileToken.value = ''
-}
-
-const resetTurnstile = () => {
-  turnstileToken.value = ''
-  if (turnstileWidgetId.value && window.turnstile) {
-    window.turnstile.reset(turnstileWidgetId.value)
-  }
 }
 
 const renderTurnstile = async () => {
@@ -221,10 +217,12 @@ const renderTurnstile = async () => {
         turnstileError.value = ''
       },
       'expired-callback': () => {
+        turnstileInvalidationRevision += 1
         turnstileToken.value = ''
         turnstileError.value = '验证已过期，请重新验证'
       },
       'error-callback': () => {
+        turnstileInvalidationRevision += 1
         turnstileToken.value = ''
         turnstileError.value = '人机验证加载失败，请刷新页面'
       }
@@ -236,7 +234,11 @@ const renderTurnstile = async () => {
 
 onMounted(async () => {
   if (route.query.logout === '1') {
-    userStore.logout()
+    try {
+      await userStore.logout()
+    } catch (error: any) {
+      MessagePlugin.error(error.message || '退出未完成，请重试')
+    }
   }
   await getVersionCfg()
   await renderTurnstile()
@@ -265,12 +267,15 @@ const getVersionCfg = async () => {
 
 const onSubmit = async ({ validateResult }: any) => {
   if (validateResult === true) {
+    if (loading.value) return
     if (turnstileEnabled.value && !turnstileToken.value) {
       MessagePlugin.warning('请完成人机验证')
       return
     }
 
     loading.value = true
+    const submittedTurnstileToken = turnstileToken.value
+    const submittedInvalidationRevision = turnstileInvalidationRevision
     try {
       const url = isRegister.value ? '/0x/user/register' : '/0x/user/login'
       const credentials = isRegister.value
@@ -285,9 +290,15 @@ const onSubmit = async ({ validateResult }: any) => {
           }
       const data = await userStore.login(url, {
         ...credentials,
-        turnstile_token: turnstileToken.value
+        turnstile_token: submittedTurnstileToken
+      }, () => {
+        if (turnstileEnabled.value && turnstileInvalidationRevision !== submittedInvalidationRevision) {
+          throw new Error('人机验证已失效，请重新验证')
+        }
+        // The verified challenge has been accepted; the server now checks the short-lived ticket.
+        removeTurnstile()
       })
-      
+
       if (data.authenticated && data.is_admin) {
         router.push({ name: 'User' })
       } else if (data.authenticated) {
@@ -295,29 +306,37 @@ const onSubmit = async ({ validateResult }: any) => {
       }
     } catch (error: any) {
       MessagePlugin.error(error.message || '操作失败')
-      resetTurnstile()
+      await renderTurnstile()
     }
     loading.value = false
   }
 }
 
 const goFree = async () => {
+  if (loading.value) return
   if (turnstileEnabled.value && !turnstileToken.value) {
     MessagePlugin.warning('请完成人机验证')
     return
   }
 
   loading.value = true
+  const submittedTurnstileToken = turnstileToken.value
+  const submittedInvalidationRevision = turnstileInvalidationRevision
   try {
     const data = await userStore.login('/0x/user/login-free', {
-      turnstile_token: turnstileToken.value
+      turnstile_token: submittedTurnstileToken
+    }, () => {
+      if (turnstileEnabled.value && turnstileInvalidationRevision !== submittedInvalidationRevision) {
+        throw new Error('人机验证已失效，请重新验证')
+      }
+      removeTurnstile()
     })
     if (data.authenticated) {
       router.push({ name: 'LoginChatgpt' })
     }
   } catch (error: any) {
     MessagePlugin.error(error.message || '免费体验暂不可用')
-    resetTurnstile()
+    await renderTurnstile()
   }
   loading.value = false
 }

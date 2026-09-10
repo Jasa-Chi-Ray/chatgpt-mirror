@@ -67,7 +67,16 @@
         <template #op="{ row }">
           <t-space>
             <t-link theme="primary" @click="showStatisticsDialog(row)">对话统计</t-link>
+            <t-link theme="primary" @click="showCapabilityDialog(row)">MCP&amp;Skills</t-link>
             <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
+            <t-popconfirm
+              content="确定撤销该用户的全部登录会话吗？用户将返回登录页面。"
+              @confirm="handleRevokeSessions(row)"
+            >
+              <t-link theme="warning" :disabled="revokingUserId === row.id">
+                {{ revokingUserId === row.id ? '撤销中…' : '撤销会话' }}
+              </t-link>
+            </t-popconfirm>
             <t-popconfirm content="确定删除该用户吗？" @confirm="handleDelete(row)">
               <t-link theme="danger">删除</t-link>
             </t-popconfirm>
@@ -95,8 +104,17 @@
         <t-form-item label="是否启用" name="is_active">
           <t-switch v-model="formData.is_active" />
         </t-form-item>
-        <t-form-item label="独立会话" name="isolated_session">
+        <t-form-item label="项目与对话隔离" name="isolated_session">
           <t-switch v-model="formData.isolated_session" />
+          <template #help>
+            <span class="form-help">按镜像用户隔离项目、项目文件和对话</span>
+          </template>
+        </t-form-item>
+        <t-form-item label="MCP 隔离" name="mcp_isolation">
+          <t-switch v-model="formData.mcp_isolation" />
+        </t-form-item>
+        <t-form-item label="Skills 隔离" name="skills_isolation">
+          <t-switch v-model="formData.skills_isolation" />
         </t-form-item>
         <t-form-item label="自动退出 Work" name="force_chat_mode">
           <t-switch v-model="formData.force_chat_mode" />
@@ -138,6 +156,66 @@
           <t-textarea v-model="formData.remark" placeholder="请输入备注" />
         </t-form-item>
       </t-form>
+    </t-dialog>
+
+    <t-dialog
+      :visible="capabilityDialogVisible"
+      :header="`${capabilityUser.username || ''} 的 MCP & Skills`"
+      :confirm-btn="{ loading: capabilitySaving, disabled: !capabilityAccountId }"
+      width="820px"
+      @confirm="saveCapabilities"
+      @close="capabilityDialogVisible = false"
+    >
+      <div class="capability-toolbar">
+        <div>
+          <div class="capability-label">清单来源账号</div>
+          <div class="form-help">必须由管理员指定。首次配置时，当前已有项目默认全部开启。</div>
+        </div>
+        <t-select
+          v-model="capabilityAccountId"
+          :loading="capabilityLoading"
+          placeholder="请选择一个绑定账号"
+          @change="loadCapabilities"
+        >
+          <t-option
+            v-for="account in capabilityAccounts"
+            :key="account.id"
+            :value="account.id"
+            :label="account.label"
+          />
+        </t-select>
+      </div>
+      <t-alert
+        v-if="capabilityAccountId && !capabilityInitialized"
+        theme="info"
+        message="当前清单默认全部开启；以后新发现的 MCP 或 Skill 默认关闭。"
+      />
+      <t-loading :loading="capabilityLoading">
+        <t-tabs v-model="capabilityTab" class="capability-tabs">
+          <t-tab-panel value="mcp" :label="`MCP (${capabilityMcp.length})`">
+            <t-checkbox-group v-if="capabilityMcp.length" v-model="selectedMcpIds" class="capability-list">
+              <t-checkbox v-for="item in capabilityMcp" :key="item.id" :value="item.id">
+                <span class="capability-item">
+                  <strong>{{ item.name }}</strong>
+                  <span v-if="item.description">{{ item.description }}</span>
+                </span>
+              </t-checkbox>
+            </t-checkbox-group>
+            <t-empty v-else description="此账号没有可配置的 MCP / 插件" />
+          </t-tab-panel>
+          <t-tab-panel value="skills" :label="`Skills (${capabilitySkills.length})`">
+            <t-checkbox-group v-if="capabilitySkills.length" v-model="selectedSkillIds" class="capability-list">
+              <t-checkbox v-for="item in capabilitySkills" :key="item.id" :value="item.id">
+                <span class="capability-item">
+                  <strong>{{ item.name }}</strong>
+                  <span v-if="item.description">{{ item.description }}</span>
+                </span>
+              </t-checkbox>
+            </t-checkbox-group>
+            <t-empty v-else description="此账号没有可配置的 Skills" />
+          </t-tab-panel>
+        </t-tabs>
+      </t-loading>
     </t-dialog>
 
     <t-dialog
@@ -210,6 +288,19 @@ const modelLimitInput = ref('')
 const query = ref('')
 const statusFilter = ref('')
 const selectedRowKeys = ref<Array<number | string>>([])
+const revokingUserId = ref<number | string | null>(null)
+const capabilityDialogVisible = ref(false)
+const capabilityLoading = ref(false)
+const capabilitySaving = ref(false)
+const capabilityTab = ref('mcp')
+const capabilityAccountId = ref<number | null>(null)
+const capabilityAccounts = ref<Array<{ id: number; label: string }>>([])
+const capabilityMcp = ref<any[]>([])
+const capabilitySkills = ref<any[]>([])
+const selectedMcpIds = ref<string[]>([])
+const selectedSkillIds = ref<string[]>([])
+const capabilityInitialized = ref(false)
+const capabilityUser = reactive({ id: 0, username: '' })
 const statisticsDialogVisible = ref(false)
 const statisticsLoading = ref(false)
 const statisticsUser = reactive({ id: 0, username: '' })
@@ -248,7 +339,7 @@ const columns = [
   { colKey: 'message_count', title: '消息数', width: 90 },
   { colKey: 'model_message_counts', title: '模型消息', cell: 'model_message_counts', width: 230 },
   { colKey: 'remark', title: '备注', ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 220 }
+  { colKey: 'op', title: '操作', cell: 'op', width: 310 }
 ]
 
 const formData = reactive({
@@ -257,6 +348,8 @@ const formData = reactive({
   password: '',
   is_active: true,
   isolated_session: true,
+  mcp_isolation: true,
+  skills_isolation: true,
   force_chat_mode: true,
   expired_date: '',
   gptcar_list: [] as number[],
@@ -313,6 +406,8 @@ const showAddDialog = () => {
     password: '',
     is_active: true,
     isolated_session: true,
+    mcp_isolation: true,
+    skills_isolation: true,
     force_chat_mode: true,
     expired_date: '',
     gptcar_list: [],
@@ -333,6 +428,8 @@ const showEditDialog = (row: any) => {
     password: '',
     is_active: row.is_active,
     isolated_session: row.isolated_session ?? true,
+    mcp_isolation: row.mcp_isolation ?? true,
+    skills_isolation: row.skills_isolation ?? true,
     force_chat_mode: row.force_chat_mode ?? true,
     expired_date: row.expired_date || '',
     gptcar_list: row.gptcar_list || [],
@@ -361,6 +458,8 @@ const handleSubmit = async () => {
     username: formData.username,
     is_active: formData.is_active,
     isolated_session: formData.isolated_session,
+    mcp_isolation: formData.mcp_isolation,
+    skills_isolation: formData.skills_isolation,
     force_chat_mode: formData.force_chat_mode,
     gptcar_list: formData.gptcar_list,
     model_limit: modelLimit,
@@ -389,6 +488,80 @@ const handleDelete = async (row: any) => {
   if (data) {
     MessagePlugin.success('删除成功')
     fetchData()
+  }
+}
+
+const handleRevokeSessions = async (row: any) => {
+  if (revokingUserId.value !== null) return
+  revokingUserId.value = row.id
+  try {
+    const data = await request('/0x/user/revoke-sessions', 'POST', { user_id: row.id })
+    if (data) {
+      MessagePlugin.success(data.message || '会话已撤销，用户将返回登录页面')
+    }
+  } finally {
+    revokingUserId.value = null
+  }
+}
+
+const applyCapabilityData = (data: any) => {
+  capabilityAccounts.value = data?.accounts || capabilityAccounts.value
+  capabilityMcp.value = data?.mcp || []
+  capabilitySkills.value = data?.skills || []
+  selectedMcpIds.value = capabilityMcp.value.filter(item => item.enabled).map(item => item.id)
+  selectedSkillIds.value = capabilitySkills.value.filter(item => item.enabled).map(item => item.id)
+  capabilityInitialized.value = Boolean(data?.initialized)
+}
+
+const loadCapabilities = async () => {
+  if (!capabilityAccountId.value) return
+  capabilityLoading.value = true
+  try {
+    const data = await request(
+      `/0x/user/${capabilityUser.id}/mcp-skills?account_id=${capabilityAccountId.value}`,
+    )
+    if (data) applyCapabilityData(data)
+  } finally {
+    capabilityLoading.value = false
+  }
+}
+
+const showCapabilityDialog = async (row: any) => {
+  capabilityUser.id = Number(row.id)
+  capabilityUser.username = row.username
+  capabilityAccountId.value = null
+  capabilityAccounts.value = []
+  capabilityMcp.value = []
+  capabilitySkills.value = []
+  capabilityDialogVisible.value = true
+  capabilityLoading.value = true
+  try {
+    const data = await request(`/0x/user/${row.id}/mcp-skills`)
+    if (!data) return
+    applyCapabilityData(data)
+    const configured = Number(data.selected_account_id || 0)
+    capabilityAccountId.value = configured || (capabilityAccounts.value[0]?.id ?? null)
+  } finally {
+    capabilityLoading.value = false
+  }
+  if (capabilityAccountId.value) await loadCapabilities()
+}
+
+const saveCapabilities = async () => {
+  if (!capabilityAccountId.value) return
+  capabilitySaving.value = true
+  try {
+    const data = await request(`/0x/user/${capabilityUser.id}/mcp-skills`, 'POST', {
+      account_id: capabilityAccountId.value,
+      mcp_allowed_ids: selectedMcpIds.value,
+      skills_allowed_ids: selectedSkillIds.value,
+    })
+    if (data) {
+      MessagePlugin.success(data.message || 'MCP 与 Skills 权限已保存')
+      capabilityDialogVisible.value = false
+    }
+  } finally {
+    capabilitySaving.value = false
   }
 }
 
@@ -542,5 +715,55 @@ const batchAction = async (action: 'activate' | 'deactivate') => {
   grid-template-columns: minmax(220px, 1fr) 160px auto auto auto;
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.capability-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 42%);
+  gap: 20px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.capability-label {
+  margin-bottom: 4px;
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.capability-tabs {
+  margin-top: 12px;
+}
+
+.capability-list {
+  display: grid;
+  max-height: 380px;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.capability-item {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.capability-item strong {
+  color: var(--app-text);
+  font-size: 14px;
+}
+
+.capability-item span {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .capability-toolbar {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

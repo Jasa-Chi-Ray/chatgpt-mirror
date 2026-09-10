@@ -24,6 +24,7 @@
         </template>
         <template #op="{ row }">
           <t-space>
+            <t-link theme="primary" @click="showDetailDialog(row)">详情</t-link>
             <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
             <t-popconfirm content="确定删除该号池吗？" @confirm="handleDelete(row)">
               <t-link theme="danger">删除</t-link>
@@ -60,6 +61,82 @@
         </t-form-item>
       </t-form>
     </t-dialog>
+
+    <t-dialog
+      :visible="detailVisible"
+      :header="detailData ? `号池详情 · ${detailData.car_name}` : '号池详情'"
+      :confirm-btn="null"
+      cancel-btn="关闭"
+      width="860px"
+      @close="detailVisible = false"
+    >
+      <t-loading :loading="detailLoading">
+        <template v-if="detailData">
+          <t-table
+            v-if="detailData.assigned_users.length"
+            :data="detailData.assigned_users"
+            :columns="detailColumns"
+            row-key="id"
+            :pagination="null"
+          >
+            <template #is_active="{ row }">
+              <t-tag size="small" :theme="row.is_active ? 'success' : 'warning'">
+                {{ row.is_active ? '正常' : '停用' }}
+              </t-tag>
+            </template>
+            <template #expired_date="{ row }">
+              <span>{{ row.expired_date || '未设置' }}</span>
+            </template>
+            <template #op="{ row }">
+              <t-popconfirm
+                content="确定将该用户移出当前号池吗？"
+                @confirm="removeUserFromCar(row)"
+              >
+                <t-link theme="danger" :disabled="assignmentLoading">踢出</t-link>
+              </t-popconfirm>
+            </template>
+          </t-table>
+          <t-empty v-else description="该号池尚未分配给任何用户" />
+          <div class="detail-actions">
+            <t-button
+              theme="primary"
+              :disabled="!detailData.available_users.length"
+              @click="showAddUserDialog"
+            >
+              <template #icon><t-icon name="user-add" /></template>
+              加入用户
+            </t-button>
+          </div>
+        </template>
+      </t-loading>
+    </t-dialog>
+
+    <t-dialog
+      :visible="addUserVisible"
+      header="加入用户"
+      :confirm-btn="{ content: '加入', loading: assignmentLoading, disabled: !selectedUserIds.length }"
+      @confirm="addUsersToCar"
+      @close="addUserVisible = false"
+    >
+      <t-form label-width="90px">
+        <t-form-item label="选择用户">
+          <t-select
+            v-model="selectedUserIds"
+            multiple
+            filterable
+            clearable
+            placeholder="请选择要加入当前号池的用户"
+          >
+            <t-option
+              v-for="user in detailData?.available_users || []"
+              :key="user.id"
+              :value="user.id"
+              :label="`${user.username}${user.is_active ? '' : '（停用）'}`"
+            />
+          </t-select>
+        </t-form-item>
+      </t-form>
+    </t-dialog>
   </div>
 </template>
 
@@ -71,11 +148,33 @@ import request from '@/api/request'
 const loading = ref(false)
 const submitLoading = ref(false)
 const dialogVisible = ref(false)
+const detailVisible = ref(false)
+const detailLoading = ref(false)
+const addUserVisible = ref(false)
+const assignmentLoading = ref(false)
+const selectedUserIds = ref<number[]>([])
 const isEdit = ref(false)
 const formRef = ref()
 const tableData = ref<any[]>([])
 const accountOptions = ref<any[]>([])
 const accountMap = ref<Record<number, string>>({})
+
+type AssignedUser = {
+  id: number
+  username: string
+  is_active: boolean
+  expired_date: string | null
+}
+
+type GptCarDetail = {
+  id: number
+  car_name: string
+  remark: string
+  assigned_users: AssignedUser[]
+  available_users: AssignedUser[]
+}
+
+const detailData = ref<GptCarDetail | null>(null)
 
 const pagination = reactive({
   current: 1,
@@ -88,7 +187,14 @@ const columns = [
   { colKey: 'car_name', title: '号池名称' },
   { colKey: 'gpt_account_list', title: '关联账号', cell: 'gpt_account_list' },
   { colKey: 'remark', title: '备注', ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 150 }
+  { colKey: 'op', title: '操作', cell: 'op', width: 190 }
+]
+
+const detailColumns = [
+  { colKey: 'username', title: '用户名' },
+  { colKey: 'is_active', title: '状态', cell: 'is_active', width: 100 },
+  { colKey: 'expired_date', title: '账号到期时间', cell: 'expired_date', width: 160 },
+  { colKey: 'op', title: '操作', cell: 'op', width: 90 }
 ]
 
 const formData = reactive({
@@ -161,6 +267,51 @@ const showEditDialog = (row: any) => {
   dialogVisible.value = true
 }
 
+const showDetailDialog = async (row: any) => {
+  detailVisible.value = true
+  detailData.value = null
+  await fetchCarDetail(row.id)
+}
+
+const fetchCarDetail = async (carId: number) => {
+  detailLoading.value = true
+  const data = await request(`/0x/chatgpt/car/${carId}/detail`)
+  detailLoading.value = false
+  if (data) detailData.value = data
+}
+
+const showAddUserDialog = () => {
+  selectedUserIds.value = []
+  addUserVisible.value = true
+}
+
+const addUsersToCar = async () => {
+  if (!detailData.value || !selectedUserIds.value.length) return
+  assignmentLoading.value = true
+  const carId = detailData.value.id
+  const data = await request(`/0x/chatgpt/car/${carId}/users`, 'POST', {
+    user_ids: selectedUserIds.value,
+  })
+  assignmentLoading.value = false
+  if (!data) return
+  MessagePlugin.success('用户已加入号池')
+  addUserVisible.value = false
+  await fetchCarDetail(carId)
+}
+
+const removeUserFromCar = async (user: AssignedUser) => {
+  if (!detailData.value) return
+  assignmentLoading.value = true
+  const carId = detailData.value.id
+  const data = await request(`/0x/chatgpt/car/${carId}/users`, 'DELETE', {
+    user_ids: [user.id],
+  })
+  assignmentLoading.value = false
+  if (!data) return
+  MessagePlugin.success('用户已移出号池')
+  await fetchCarDetail(carId)
+}
+
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate()
   if (valid !== true) return
@@ -198,3 +349,11 @@ const handleDelete = async (row: any) => {
   }
 }
 </script>
+
+<style scoped>
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+</style>

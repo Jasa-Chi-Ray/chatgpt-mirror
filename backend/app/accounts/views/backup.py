@@ -10,9 +10,11 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from app.permissions import IsSuperUser
 
 from app.accounts.models import Announcement, User, VisitLog
 from app.chatgpt.models import ChatgptAccount, ChatgptCar
@@ -38,6 +40,7 @@ GATEWAY_BACKUP_COLLECTIONS = (
     "gateway_sessions",
     "settings",
     "conversation_owners",
+    "project_owners",
     "visit_logs",
     "conversation_statistics",
     "conversation_model_statistics",
@@ -79,6 +82,12 @@ def _export_django_data():
                 "date_joined": _iso(user.date_joined),
                 "remark": user.remark,
                 "isolated_session": user.isolated_session,
+                "mcp_isolation": user.mcp_isolation,
+                "skills_isolation": user.skills_isolation,
+                "capability_account_id": user.capability_account_id,
+                "capability_policy_initialized": user.capability_policy_initialized,
+                "mcp_allowlist": user.mcp_allowlist,
+                "skills_allowlist": user.skills_allowlist,
                 "gptcar_list": user.gptcar_list,
                 "model_limit": user.model_limit,
                 "expired_date": _iso(user.expired_date),
@@ -372,7 +381,7 @@ def _restore_legacy_backup(payload):
 
 
 class UnifiedBackupView(APIView):
-    permission_classes = (IsAuthenticated, IsAdminUser)
+    permission_classes = (IsAuthenticated, IsSuperUser)
 
     def get(self, request):
         payload = {

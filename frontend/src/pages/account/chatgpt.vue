@@ -117,45 +117,16 @@
       width="600px"
     >
       <t-form :data="addFormData" ref="addFormRef" label-width="120px">
-        <t-form-item label="录入方式" name="auth_type">
-          <t-radio-group v-model="authInputType">
-            <t-radio-button value="cookie">Cookie 录入</t-radio-button>
-            <t-radio-button value="refresh_token">RefreshToken 录入</t-radio-button>
-          </t-radio-group>
+        <t-form-item label="Token 列表" name="chatgpt_token_list">
+          <t-textarea
+            v-model="tokenInput"
+            placeholder="支持直接粘贴 AccessToken、SessionToken、完整 Cookie 文本或 Netscape HTTP Cookie File"
+            :autosize="{ minRows: 5, maxRows: 10 }"
+          />
         </t-form-item>
-
-        <template v-if="authInputType === 'cookie'">
-          <t-form-item label="Token 列表" name="chatgpt_token_list">
-            <t-textarea
-              v-model="tokenInput"
-              placeholder="支持直接粘贴 AccessToken、SessionToken、完整 Cookie 文本或 Netscape HTTP Cookie File"
-              :autosize="{ minRows: 5, maxRows: 10 }"
-            />
-          </t-form-item>
-          <t-form-item>
-            <t-alert theme="info" message="支持自动识别 AccessToken、SessionToken、浏览器 Cookie 文本与 Netscape HTTP Cookie File，并自动提取额外官网 Cookie。" />
-          </t-form-item>
-        </template>
-
-        <template v-else>
-          <t-form-item label="Client ID" name="client_id">
-            <t-input
-              v-model="refreshClientId"
-              clearable
-              placeholder="请输入 OpenAI 官方应用 Client ID"
-            />
-          </t-form-item>
-          <t-form-item label="RefreshToken" name="refresh_token">
-            <t-textarea
-              v-model="refreshTokenInput"
-              placeholder="请输入有效 refresh_token"
-              :autosize="{ minRows: 4, maxRows: 8 }"
-            />
-          </t-form-item>
-          <t-form-item>
-            <t-alert theme="warning" message="RefreshToken 会滚动更新，系统会保存接口返回的新 refresh_token，请避免在多个服务中同时使用同一个旧 token。" />
-          </t-form-item>
-        </template>
+        <t-form-item>
+          <t-alert theme="info" message="支持自动识别 AccessToken、SessionToken、浏览器 Cookie 文本与 Netscape HTTP Cookie File，并自动提取额外官网 Cookie。" />
+        </t-form-item>
       </t-form>
     </t-dialog>
 
@@ -194,10 +165,6 @@ import { ref, reactive, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
 
-type AuthInputType = 'cookie' | 'refresh_token'
-
-const DEFAULT_REFRESH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
-
 const loading = ref(false)
 const submitLoading = ref(false)
 const addDialogVisible = ref(false)
@@ -205,10 +172,7 @@ const editDialogVisible = ref(false)
 const addFormRef = ref()
 const editFormRef = ref()
 const tableData = ref<any[]>([])
-const authInputType = ref<AuthInputType>('cookie')
 const tokenInput = ref('')
-const refreshClientId = ref(DEFAULT_REFRESH_CLIENT_ID)
-const refreshTokenInput = ref('')
 const proxyNodeOptions = ref<Array<{ id: number }>>([])
 const checkingAll = ref(false)
 const checkingId = ref<number | null>(null)
@@ -241,7 +205,6 @@ const columns = [
 ]
 
 const addFormData = reactive({
-  auth_type: 'cookie' as AuthInputType,
   chatgpt_token_list: [] as string[]
 })
 
@@ -350,11 +313,7 @@ const onPageChange = (pageInfo: any) => {
 }
 
 const showAddDialog = () => {
-  authInputType.value = 'cookie'
-  addFormData.auth_type = 'cookie'
   tokenInput.value = ''
-  refreshClientId.value = DEFAULT_REFRESH_CLIENT_ID
-  refreshTokenInput.value = ''
   addDialogVisible.value = true
 }
 
@@ -391,34 +350,6 @@ const splitTokenInputs = (raw: string) => {
 }
 
 const handleAdd = async () => {
-  if (authInputType.value === 'refresh_token') {
-    const clientId = refreshClientId.value.trim()
-    const refreshToken = refreshTokenInput.value.trim()
-    if (!clientId) {
-      MessagePlugin.warning('请输入 client_id')
-      return
-    }
-    if (!refreshToken) {
-      MessagePlugin.warning('请输入 refresh_token')
-      return
-    }
-
-    submitLoading.value = true
-    const data = await request('/0x/chatgpt', 'POST', {
-      auth_type: 'refresh_token',
-      client_id: clientId,
-      refresh_token: refreshToken
-    })
-    submitLoading.value = false
-
-    if (data) {
-      MessagePlugin.success(data.message || '添加成功')
-      addDialogVisible.value = false
-      fetchData()
-    }
-    return
-  }
-
   const tokens = splitTokenInputs(tokenInput.value)
   if (tokens.length === 0) {
     MessagePlugin.warning('请输入至少一个 Token')

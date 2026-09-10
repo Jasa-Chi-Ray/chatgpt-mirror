@@ -16,6 +16,7 @@ from app.page import DefaultPageNumberPagination
 from app.settings import CHATGPT_GATEWAY_URL
 from app.utils import get_request_subject, save_visit_log, req_gateway
 from app.accounts.models import User
+from app.accounts.session_authority import gateway_authorization, capability_aliases
 from rest_framework.exceptions import ValidationError
 
 DEFAULT_REFRESH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -231,11 +232,16 @@ class ChatGPTLoginView(APIView):
         user_name = get_request_subject(request)
         payload = {
             "user_name": user_name,
+            "authorization": gateway_authorization(request),
             "access_token": chatgpt.access_token,
             "session_token": chatgpt.session_token,
             "extra_cookies": chatgpt.extra_cookies,
             "login_mode": login_mode,
             "isolated_session": request.user.isolated_session,
+            "mcp_isolation": request.user.mcp_isolation and request.user.capability_policy_initialized,
+            "skills_isolation": request.user.skills_isolation and request.user.capability_policy_initialized,
+            "mcp_allowed_ids": capability_aliases(request.user, "mcp_allowlist"),
+            "skills_allowed_ids": capability_aliases(request.user, "skills_allowlist"),
             "limits": [
                 item for item in (request.user.model_limit or []) if isinstance(item, str)
             ],

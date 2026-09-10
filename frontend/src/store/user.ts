@@ -30,11 +30,21 @@ export const useUserStore = defineStore('user', () => {
     csrfToken.value = token
   }
 
-  const login = async (url: string, data: any) => {
+  const prepareCsrf = async () => {
+    const response = await fetch('/0x/user/version-cfg', { cache: 'no-store' })
+    if (!response.ok) throw new Error('无法准备登录验证，请重试')
+    const config = await response.json()
+    if (!config.csrf_token) throw new Error('无法准备登录验证，请重试')
+    setCsrfToken(config.csrf_token)
+  }
+
+  const login = async (url: string, data: any, beforeConfirm: () => void = () => {}) => {
+    await prepareCsrf()
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken.value
       },
       body: JSON.stringify(data)
     })
@@ -44,7 +54,20 @@ export const useUserStore = defineStore('user', () => {
       throw new Error(error.message || '登录失败')
     }
 
-    const result = await response.json()
+    const prepared = await response.json()
+    if (!prepared.login_ticket) throw new Error('登录确认无效，请重试')
+    // No authenticated cookie exists before this callback accepts the current challenge.
+    beforeConfirm()
+    const confirmation = await fetch('/0x/user/login-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken.value },
+      body: JSON.stringify({ login_ticket: prepared.login_ticket })
+    })
+    if (!confirmation.ok) {
+      const error = await confirmation.json()
+      throw new Error(error.message || '登录确认失败，请重新验证')
+    }
+    const result = await confirmation.json()
     
     authenticated.value = Boolean(result.authenticated)
     setUsername(result.username || data.username || '')
@@ -73,19 +96,15 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const logout = async () => {
+    await prepareCsrf()
     const activeCsrfToken =
       csrfToken.value || document.cookie.match(/(?:^|; )csrftoken=([^;]*)/)?.[1] || ''
-    if (authenticated.value) {
-      try {
-        await fetch('/0x/user/logout', {
-          method: 'POST',
-          keepalive: true,
-          headers: activeCsrfToken ? { 'X-CSRFToken': decodeURIComponent(activeCsrfToken) } : {}
-        })
-      } catch {
-        // 本地状态仍需清理；服务端 Token 会按 TTL 自动过期。
-      }
-    }
+    const response = await fetch('/0x/user/logout', {
+      method: 'POST',
+      keepalive: true,
+      headers: activeCsrfToken ? { 'X-CSRFToken': decodeURIComponent(activeCsrfToken) } : {}
+    })
+    if (!response.ok) throw new Error('退出未完成，请重试')
     authenticated.value = false
     isAdmin.value = false
     username.value = ''

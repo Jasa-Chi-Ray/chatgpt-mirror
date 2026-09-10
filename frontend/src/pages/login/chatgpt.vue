@@ -77,36 +77,25 @@
     >
       <t-loading :loading="tableLoading">
         <t-space direction="vertical" style="width: 100%; margin-bottom: 16px" :size="12">
-          <div class="mode-switch">
-            <span class="mode-switch__label">登录模式</span>
-            <t-radio-group v-model="selectedMode" variant="default-filled">
-              <t-radio-button value="api">API 模式</t-radio-button>
-              <t-radio-button value="web">混合模式</t-radio-button>
-            </t-radio-group>
-          </div>
           <t-space>
             <t-button theme="primary" :disabled="tableLoading" @click="onSelect(null)">
               智能分配最空闲账号
             </t-button>
-            <t-button variant="text" @click="router.push('/account/profile')">账户中心</t-button>
+            <t-button
+              v-if="!userStore.isAdmin"
+              variant="text"
+              @click="router.push('/account/profile')"
+            >
+              账户中心
+            </t-button>
           </t-space>
-          <t-alert
-            v-if="selectedMode === 'api'"
-            theme="info"
-            message="API 模式默认优先使用 AccessToken，可保证接口能力，但不承诺官方网页完整登录态。"
-          />
-          <t-alert
-            v-else
-            theme="warning"
-            message="混合模式会同时传入 AccessToken 与 SessionToken，优先建立网页态，同时保留 AccessToken 供接口链路回退。"
-          />
         </t-space>
         <t-space break-line>
           <div
             v-for="item in tableData"
             :key="item.id"
             style="width: 160px; cursor: pointer"
-            :class="{ 'is-disabled': !item.auth_status || !supportsMode(item, selectedMode) }"
+            :class="{ 'is-disabled': !item.auth_status || !item.supported_login_modes.length }"
             @click="onSelect(item.id)"
           >
             <div style="background: #f2f4f7; padding: 8px; border-radius: 5px">
@@ -122,15 +111,6 @@
                     >{{ item.plan_type }}</t-tag>
                     <span>{{ item.chatgpt_flag }}</span>
                   </div>
-                </div>
-
-                <div class="mode-tags">
-                  <t-tag size="small" :theme="item.access_token_valid ? 'success' : 'default'">
-                    API
-                  </t-tag>
-                  <t-tag size="small" :theme="item.session_token_valid ? 'success' : 'default'">
-                    混合
-                  </t-tag>
                 </div>
 
                 <div style="font-size: 12px; display: flex; justify-content: space-between">
@@ -195,15 +175,17 @@ interface TableData {
   default_login_mode: 'api' | 'web'
 }
 const tableData = ref<TableData[]>([])
-const selectedMode = ref<'api' | 'web'>('api')
-const preferredMode = ref<'api' | 'web'>('api')
 
 onMounted(async () => {
   if (route.query.logout === '1') {
-    userStore.logout()
+    try {
+      await userStore.logout()
+      await router.replace('/login')
+    } catch (error: any) {
+      MessagePlugin.error(error.message || '退出未完成，请重试')
+    }
+    return
   }
-  preferredMode.value = route.query.mode === 'web' ? 'web' : 'api'
-  selectedMode.value = preferredMode.value
   await prepareAnnouncements()
 })
 
@@ -258,31 +240,10 @@ const getUserChatGPTAccountList = async () => {
   const results = data.results || []
   tableData.value = results
 
-  if (results.length > 0 && !results.some((item: TableData) => supportsMode(item, selectedMode.value))) {
-    const fallbackMode = selectedMode.value === 'web' ? 'api' : 'web'
-    if (results.some((item: TableData) => supportsMode(item, fallbackMode))) {
-      selectedMode.value = fallbackMode
-      MessagePlugin.info(
-        fallbackMode === 'api'
-          ? '当前没有支持混合模式的账号，已切换到 API 模式'
-          : '当前没有支持 API 模式的账号，已切换到混合模式',
-      )
-    }
-  }
-  
   if (results.length === 0) {
     MessagePlugin.warning('暂无可用的 ChatGPT 账号，请联系管理员添加')
     statusText.value = '暂无可用的 ChatGPT 账号，请联系管理员添加'
   } else {
-    if (results.length === 1 && results[0].auth_status && !supportsMode(results[0], selectedMode.value)) {
-      if (supportsMode(results[0], 'api')) {
-        selectedMode.value = 'api'
-        statusText.value = '该账号当前不支持混合模式，已切回 API 模式，请确认登录'
-      } else if (supportsMode(results[0], 'web')) {
-        selectedMode.value = 'web'
-        statusText.value = '该账号当前仅支持混合模式，请确认登录'
-      }
-    }
     tableVisible.value = true
   }
 }
@@ -295,25 +256,32 @@ const supportsMode = (item: TableData, mode: 'api' | 'web') => {
   return Array.isArray(item.supported_login_modes) && item.supported_login_modes.includes(mode)
 }
 
+const resolveLoginMode = (item?: TableData) => {
+  if (item) {
+    if (supportsMode(item, item.default_login_mode)) return item.default_login_mode
+    if (supportsMode(item, 'api')) return 'api'
+    if (supportsMode(item, 'web')) return 'web'
+    return null
+  }
+
+  if (tableData.value.some(account => supportsMode(account, 'api'))) return 'api'
+  if (tableData.value.some(account => supportsMode(account, 'web'))) return 'web'
+  return null
+}
+
 const onSelect = async (chatgptId: number | null) => {
   const current = tableData.value.find(item => item.id === chatgptId)
-  if (current && !supportsMode(current, selectedMode.value)) {
-    MessagePlugin.warning(
-      selectedMode.value === 'api'
-        ? '该账号当前不支持 API 模式，请切换到混合模式或联系管理员更新 AccessToken'
-        : '该账号当前不支持混合模式，请切换到 API 模式或联系管理员补录 SessionToken',
-    )
+  const loginMode = resolveLoginMode(current)
+  if (!loginMode) {
+    MessagePlugin.warning('当前没有可登录的账号，请联系管理员更新账号凭据')
     return
   }
 
   tableLoading.value = true
-  statusText.value =
-    selectedMode.value === 'api'
-      ? '正在以 API 模式登录 ChatGPT，请稍候...'
-      : '正在以混合模式登录 ChatGPT，请稍候...'
+  statusText.value = '正在登录 ChatGPT，请稍候...'
   const data = await request('/0x/chatgpt/login', 'POST', {
     chatgpt_id: chatgptId,
-    login_mode: selectedMode.value,
+    login_mode: loginMode,
   })
   tableLoading.value = false
   
@@ -358,12 +326,6 @@ const onSelect = async (chatgptId: number | null) => {
   margin-top: 10px;
   color: #6b7280;
   font-size: 14px;
-}
-
-.mode-switch {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .announcement-intro {
@@ -414,17 +376,6 @@ const onSelect = async (chatgptId: number | null) => {
 
 .announcement-content {
   margin-top: 12px;
-}
-
-.mode-switch__label {
-  color: #111827;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.mode-tags {
-  display: flex;
-  gap: 6px;
 }
 
 .is-disabled {
