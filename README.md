@@ -224,6 +224,7 @@ client_header_buffer_size 64k;
 - 复测
 - 修复错误
 - 修复错误 x 2
+- MCP & skills 隔离
 
 ### 2026-08
 
