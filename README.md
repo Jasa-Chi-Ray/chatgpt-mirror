@@ -134,37 +134,30 @@ CREDENTIAL_ENCRYPTION_KEY=请替换为至少32位的独立随机密钥
 DJANGO_ALLOW_ALL_ORIGINS=disable
 DJANGO_ALLOWED_HOSTS=example.com,django,localhost,127.0.0.1
 DJANGO_CSRF_TRUSTED_ORIGINS=https://example.com
+LOCAL_NETWORK_ACCESS=disable
 
 CLOUDFLARE_TURNSTILE=disable
 CLOUDFLARE_TURNSTILE_SITE_KEY=
 CLOUDFLARE_TURNSTILE_SECRET_KEY=
-
 ```
 
-如果使用 `DJANGO_ALLOW_ALL_ORIGINS=enable`
-则添加以下变量
+需要直接通过 `http://localhost:端口` 或 `http://局域网IP:端口` 访问时，可设置：
 
-```
-DJANGO_SESSION_COOKIE_SECURE=false
-DJANGO_CSRF_COOKIE_SECURE=false
-COOKIE_SECURE=false
+```env
+LOCAL_NETWORK_ACCESS=enable
 ```
 
+该开关会让 Gateway 允许任意 Django Host/Origin/Referer，并强制关闭
+`DJANGO_SESSION_COOKIE_SECURE`、`DJANGO_CSRF_COOKIE_SECURE` 和 `COOKIE_SECURE`，因此不需要再分别设置这三个变量。
+CSRF token 和登录鉴权仍然保留。此模式允许 Cookie 经明文 HTTP 传输，理论只应在可信本地或局域网使用；公网 HTTPS 部署须保持 `disable`。
+除 `enable`、`disable` 外的值会导致服务拒绝启动。
 
-`DJANGO_ALLOW_ALL_ORIGINS` 支持以下两种模式：
-
-| 值 | 行为 | 建议用途 |
-| -- | -- | -- |
-| `disable` | 应用 `DJANGO_ALLOWED_HOSTS` 和 `DJANGO_CSRF_TRUSTED_ORIGINS` 配置 | 生产环境推荐 |
-| `enable` | 允许任意 Host、Origin 和 Referer，忽略上述两个白名单 | 仅用于确实需要动态域名的受控环境 |
-
-开启 `enable` 不会取消 CSRF token 校验，也不会自动配置浏览器 CORS。填写 `enable`、`disable` 以外的值会导致 Django 拒绝启动。
 
 请勿将真实密码、Cookie、Token 或 `.env` 文件提交到版本库。
 
 
 
-常用命令（使用 VPS 或 All-in-One 编排时，需附加与启动命令相同的 `-f <文件名>`）：
+常用命令
 
 ```bash
 docker compose ps
