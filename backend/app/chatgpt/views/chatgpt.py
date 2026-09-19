@@ -16,7 +16,7 @@ from app.page import DefaultPageNumberPagination
 from app.settings import CHATGPT_GATEWAY_URL
 from app.utils import get_request_subject, save_visit_log, req_gateway
 from app.accounts.models import User
-from app.accounts.session_authority import gateway_authorization, capability_aliases
+from app.accounts.session_authority import gateway_authorization, capability_aliases, account_model_policy
 from rest_framework.exceptions import ValidationError
 
 DEFAULT_REFRESH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -250,6 +250,7 @@ class ChatGPTLoginView(APIView):
             "monthly_quota": request.user.monthly_quota,
             "force_chat_mode": request.user.force_chat_mode,
         }
+        payload.update(account_model_policy(request.user, chatgpt))
         # print(payload)
         res_json = req_gateway("post", "/api/login", json=payload)
 

@@ -25,6 +25,7 @@ def policy_digest(user):
         "pools": user.gptcar_list, "models": user.model_limit,
         "isolation": user.isolated_session, "force_chat": user.force_chat_mode,
         "mcp_isolation": user.mcp_isolation, "skills_isolation": user.skills_isolation,
+        "model_isolation": user.model_isolation, "model_policies": user.model_policies,
         "capability_policy_initialized": user.capability_policy_initialized,
         "mcp_allowlist": user.mcp_allowlist, "skills_allowlist": user.skills_allowlist,
         "daily_quota": user.daily_quota, "monthly_quota": user.monthly_quota,
@@ -42,6 +43,41 @@ def capability_aliases(user, field):
             if value and value not in aliases:
                 aliases.append(value)
     return aliases
+
+
+def account_model_policy(user, account):
+    for item in user.model_policies or []:
+        if not isinstance(item, dict) or item.get("account_id") != account.id:
+            continue
+        models = [
+            str(model.get("id") or "").strip().lower()
+            for model in item.get("models") or []
+            if isinstance(model, dict) and str(model.get("id") or "").strip()
+        ]
+        rate_limits = {
+            str(model.get("id") or "").strip().lower(): {
+                "hour_window_hours": max(1, int(model.get("hour_window_hours") or 1)),
+                "hour_limit": int(model.get("hour_limit") or model.get("hourly_limit") or 0),
+                "week_limit": int(model.get("week_limit") or 0),
+                "month_limit": int(model.get("month_limit") or 0),
+            }
+            for model in item.get("models") or []
+            if isinstance(model, dict)
+            and str(model.get("id") or "").strip()
+        }
+        return {
+            "model_isolation": bool(user.model_isolation),
+            "model_allowed_ids": models,
+            "model_rate_limits": rate_limits,
+        }
+    return {"model_isolation": False, "model_allowed_ids": [], "model_rate_limits": {}}
+
+
+def account_model_policies_by_username(user, accounts):
+    return {
+        account.chatgpt_username.lower(): account_model_policy(user, account)
+        for account in accounts
+    }
 
 
 def authorization_version(user, token):

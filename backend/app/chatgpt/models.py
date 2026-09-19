@@ -2,6 +2,28 @@ import time
 
 from django.db import models
 from app.fields import EncryptedJSONField, EncryptedTextField
+from django.utils import timezone
+
+
+class AccountHealthSettings(models.Model):
+    # One installation-wide configuration; secrets never appear in API responses.
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    interval_minutes = models.PositiveIntegerField(default=5)
+    recipient = models.EmailField(blank=True)
+    smtp_host = models.CharField(max_length=253, blank=True)
+    smtp_port = models.PositiveIntegerField(default=465)
+    smtp_security = models.CharField(max_length=8, default="ssl")
+    smtp_username = models.EmailField(blank=True)
+    smtp_password = EncryptedTextField(blank=True, default="")
+    imap_host = models.CharField(max_length=253, blank=True)
+    imap_port = models.PositiveIntegerField(default=993)
+    imap_security = models.CharField(max_length=8, default="ssl")
+    imap_username = models.CharField(max_length=254, blank=True)
+    imap_password = EncryptedTextField(blank=True, default="")
+    revision = models.PositiveIntegerField(default=0)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    last_mail_error = models.CharField(max_length=200, blank=True)
 
 
 class ChatgptCar(models.Model):
@@ -116,3 +138,14 @@ class ChatgptAccount(models.Model):
 
         new_obj.save()
         return new_obj.id
+
+
+class AccountHealthState(models.Model):
+    account = models.OneToOneField(ChatgptAccount, on_delete=models.CASCADE)
+    next_check_at = models.DateTimeField(default=timezone.now, db_index=True)
+    first_failure_at = models.DateTimeField(null=True, blank=True)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    notified = models.BooleanField(default=False)
+    detail = models.CharField(max_length=200, blank=True)
+    lease_until = models.DateTimeField(null=True, blank=True)
+    lease_token = models.CharField(max_length=32, blank=True)

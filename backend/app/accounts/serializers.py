@@ -55,6 +55,7 @@ class ShowUserAccountModelSerializer(serializers.ModelSerializer):
             "password", "is_superuser", "first_name", "last_name", "email", "is_staff",
             "groups", "user_permissions", "capability_account_id",
             "capability_policy_initialized", "mcp_allowlist", "skills_allowlist",
+            "model_policies",
         )
         # fields = "__all__"
 
@@ -70,6 +71,7 @@ class AddUserAccountSerializer(serializers.Serializer):
     isolated_session = serializers.BooleanField()
     mcp_isolation = serializers.BooleanField(required=False, default=True)
     skills_isolation = serializers.BooleanField(required=False, default=True)
+    model_isolation = serializers.BooleanField(required=False, default=True)
     expired_date = serializers.DateField(required=False, allow_null=True)
     daily_quota = serializers.IntegerField(required=False, min_value=0, default=0)
     monthly_quota = serializers.IntegerField(required=False, min_value=0, default=0)
@@ -96,6 +98,42 @@ class UserCapabilityPolicySerializer(serializers.Serializer):
     skills_allowed_ids = serializers.ListField(
         child=serializers.CharField(max_length=300), allow_empty=True, max_length=1000
     )
+
+
+class UserModelPolicySerializer(serializers.Serializer):
+    account_id = serializers.IntegerField(min_value=1)
+    model_allowed_ids = serializers.ListField(
+        child=serializers.CharField(max_length=200), allow_empty=True, max_length=500
+    )
+    model_hourly_limits = serializers.DictField(
+        child=serializers.IntegerField(min_value=0, max_value=100000), required=False, default=dict
+    )
+    model_rate_limits = serializers.JSONField(required=False, default=dict)
+
+    def validate_model_rate_limits(self, value):
+        if not isinstance(value, dict) or len(value) > 500:
+            raise serializers.ValidationError("模型频率限制格式无效")
+        normalized = {}
+        for raw_model_id, raw_limits in value.items():
+            model_id = str(raw_model_id or "").strip().lower()
+            if not model_id or len(model_id) > 200 or not isinstance(raw_limits, dict):
+                raise serializers.ValidationError("模型频率限制格式无效")
+            limits = {}
+            for key, default, maximum in (
+                ("hour_window_hours", 1, 8760),
+                ("hour_limit", 0, 100000),
+                ("week_limit", 0, 100000),
+                ("month_limit", 0, 100000),
+            ):
+                raw_value = raw_limits.get(key, default)
+                if isinstance(raw_value, bool) or not isinstance(raw_value, int):
+                    raise serializers.ValidationError(f"{model_id} 的 {key} 必须是整数")
+                minimum = 1 if key == "hour_window_hours" else 0
+                if raw_value < minimum or raw_value > maximum:
+                    raise serializers.ValidationError(f"{model_id} 的 {key} 超出允许范围")
+                limits[key] = raw_value
+            normalized[model_id] = limits
+        return normalized
 
 
 class BatchModelLimitSerializer(serializers.Serializer):

@@ -36,15 +36,9 @@
           {{ row.expired_date || '永久' }}
         </template>
         <template #model_limit="{ row }">
-          <t-space size="small" v-if="row.model_limit && row.model_limit.length > 0">
-            <t-tag v-for="model in row.model_limit.slice(0, 2)" :key="model" size="small">
-              {{ model }}
-            </t-tag>
-            <t-tag v-if="row.model_limit.length > 2" size="small">
-              +{{ row.model_limit.length - 2 }}
-            </t-tag>
-          </t-space>
-          <span v-else class="text-gray">全部模型</span>
+          <t-tag :theme="row.model_isolation !== false ? 'success' : 'default'">
+            {{ row.model_isolation !== false ? '按账号' : '不隔离' }}
+          </t-tag>
         </template>
         <template #force_chat_mode="{ row }">
           <t-tag :theme="row.force_chat_mode !== false ? 'success' : 'default'">
@@ -68,6 +62,7 @@
           <t-space>
             <t-link theme="primary" @click="showStatisticsDialog(row)">对话统计</t-link>
             <t-link theme="primary" @click="showCapabilityDialog(row)">MCP&amp;Skills</t-link>
+            <t-link theme="primary" @click="showModelDialog(row)">模型与频率</t-link>
             <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
             <t-popconfirm
               content="确定撤销该用户的全部登录会话吗？用户将返回登录页面。"
@@ -116,6 +111,12 @@
         <t-form-item label="Skills 隔离" name="skills_isolation">
           <t-switch v-model="formData.skills_isolation" />
         </t-form-item>
+        <t-form-item label="模型隔离" name="model_isolation">
+          <t-switch v-model="formData.model_isolation" />
+          <template #help>
+            <span class="form-help">仅限制普通 Chat 模型；Work 模型不参与隔离和频率限制</span>
+          </template>
+        </t-form-item>
         <t-form-item label="自动退出 Work" name="force_chat_mode">
           <t-switch v-model="formData.force_chat_mode" />
           <template #help>
@@ -142,20 +143,76 @@
             <t-option v-for="car in carOptions" :key="car.id" :value="car.id" :label="car.car_name" />
           </t-select>
         </t-form-item>
-        <t-form-item label="模型限制" name="model_limit">
-          <t-textarea
-            v-model="modelLimitInput"
-            placeholder="多个模型用逗号或换行分隔，留空表示可使用全部模型"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-          />
-          <template #help>
-            <span class="form-help">按上游 Django 后台协议直接提交模型 ID 列表，不再依赖 /0x/models/* 接口</span>
-          </template>
-        </t-form-item>
         <t-form-item label="备注" name="remark">
           <t-textarea v-model="formData.remark" placeholder="请输入备注" />
         </t-form-item>
       </t-form>
+    </t-dialog>
+
+    <t-dialog
+      :visible="modelDialogVisible"
+      :header="`${modelUser.username || ''} 的普通模型与频率`"
+      :confirm-btn="{ loading: modelSaving, disabled: !modelAccountId }"
+      width="1120px"
+      @confirm="saveModelPolicy"
+      @close="modelDialogVisible = false"
+    >
+      <div class="capability-toolbar">
+        <div>
+          <div class="capability-label">策略账号</div>
+          <div class="form-help">模型清单由该绑定账号的官网接口实时返回；各周期从首次发送起计算，次数填 0 表示不限频。</div>
+        </div>
+        <t-select
+          v-model="modelAccountId"
+          :loading="modelLoading"
+          placeholder="请选择一个绑定账号"
+          @change="loadModelPolicy"
+        >
+          <t-option
+            v-for="account in modelAccounts"
+            :key="account.id"
+            :value="account.id"
+            :label="account.label"
+          />
+        </t-select>
+      </div>
+      <t-alert
+        v-if="modelAccountId && !modelInitialized"
+        theme="info"
+        message="首次配置时当前普通模型默认全部开启；以后官网新增模型默认关闭。Work 模型不受此策略影响。"
+      />
+      <t-loading :loading="modelLoading">
+        <div v-if="modelItems.length" class="model-policy-list">
+          <div v-for="item in modelItems" :key="item.id" class="model-policy-row">
+            <t-checkbox v-model="item.enabled">
+              <span class="capability-item">
+                <strong>{{ item.name || item.id }}</strong>
+                <span>{{ item.id }}</span>
+              </span>
+            </t-checkbox>
+            <div class="model-rate-fields">
+              <label class="model-limit-field">
+                <span>每</span>
+                <t-input v-model="item.hour_window_hours" type="number" :min="1" :max="8760" :disabled="!item.enabled" />
+                <span>小时</span>
+                <t-input v-model="item.hour_limit" type="number" :min="0" :max="100000" :disabled="!item.enabled" />
+                <span>次</span>
+              </label>
+              <label class="model-limit-field">
+                <span>每周</span>
+                <t-input v-model="item.week_limit" type="number" :min="0" :max="100000" :disabled="!item.enabled" />
+                <span>次</span>
+              </label>
+              <label class="model-limit-field">
+                <span>每月</span>
+                <t-input v-model="item.month_limit" type="number" :min="0" :max="100000" :disabled="!item.enabled" />
+                <span>次</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <t-empty v-else description="此账号没有可配置的普通模型" />
+      </t-loading>
     </t-dialog>
 
     <t-dialog
@@ -284,7 +341,6 @@ const isEdit = ref(false)
 const formRef = ref()
 const tableData = ref<any[]>([])
 const carOptions = ref<any[]>([])
-const modelLimitInput = ref('')
 const query = ref('')
 const statusFilter = ref('')
 const selectedRowKeys = ref<Array<number | string>>([])
@@ -301,6 +357,23 @@ const selectedMcpIds = ref<string[]>([])
 const selectedSkillIds = ref<string[]>([])
 const capabilityInitialized = ref(false)
 const capabilityUser = reactive({ id: 0, username: '' })
+const modelDialogVisible = ref(false)
+const modelLoading = ref(false)
+const modelSaving = ref(false)
+const modelAccountId = ref<number | null>(null)
+const modelAccounts = ref<Array<{ id: number; label: string }>>([])
+const modelItems = ref<Array<{
+  id: string
+  name: string
+  description?: string
+  enabled: boolean
+  hour_window_hours: number
+  hour_limit: number
+  week_limit: number
+  month_limit: number
+}>>([])
+const modelInitialized = ref(false)
+const modelUser = reactive({ id: 0, username: '' })
 const statisticsDialogVisible = ref(false)
 const statisticsLoading = ref(false)
 const statisticsUser = reactive({ id: 0, username: '' })
@@ -332,14 +405,14 @@ const columns = [
   { colKey: 'id', title: 'ID', width: 80 },
   { colKey: 'username', title: '用户名' },
   { colKey: 'is_active', title: '状态', cell: 'is_active', width: 80 },
-  { colKey: 'model_limit', title: '模型限制', cell: 'model_limit', width: 180 },
+  { colKey: 'model_limit', title: '普通模型', cell: 'model_limit', width: 110 },
   { colKey: 'force_chat_mode', title: 'Work 模式', cell: 'force_chat_mode', width: 110 },
   { colKey: 'expired_date', title: '过期日期', cell: 'expired_date', width: 120 },
   { colKey: 'conversation_count', title: '对话数', width: 90 },
   { colKey: 'message_count', title: '消息数', width: 90 },
   { colKey: 'model_message_counts', title: '模型消息', cell: 'model_message_counts', width: 230 },
   { colKey: 'remark', title: '备注', ellipsis: true },
-  { colKey: 'op', title: '操作', cell: 'op', width: 310 }
+  { colKey: 'op', title: '操作', cell: 'op', width: 390 }
 ]
 
 const formData = reactive({
@@ -350,6 +423,7 @@ const formData = reactive({
   isolated_session: true,
   mcp_isolation: true,
   skills_isolation: true,
+  model_isolation: true,
   force_chat_mode: true,
   expired_date: '',
   gptcar_list: [] as number[],
@@ -408,6 +482,7 @@ const showAddDialog = () => {
     isolated_session: true,
     mcp_isolation: true,
     skills_isolation: true,
+    model_isolation: true,
     force_chat_mode: true,
     expired_date: '',
     gptcar_list: [],
@@ -416,7 +491,6 @@ const showAddDialog = () => {
     daily_quota: 0,
     monthly_quota: 0
   })
-  modelLimitInput.value = ''
   dialogVisible.value = true
 }
 
@@ -430,6 +504,7 @@ const showEditDialog = (row: any) => {
     isolated_session: row.isolated_session ?? true,
     mcp_isolation: row.mcp_isolation ?? true,
     skills_isolation: row.skills_isolation ?? true,
+    model_isolation: row.model_isolation ?? true,
     force_chat_mode: row.force_chat_mode ?? true,
     expired_date: row.expired_date || '',
     gptcar_list: row.gptcar_list || [],
@@ -438,7 +513,6 @@ const showEditDialog = (row: any) => {
     daily_quota: Number(row.daily_quota || 0),
     monthly_quota: Number(row.monthly_quota || 0)
   })
-  modelLimitInput.value = (row.model_limit || []).join(', ')
   dialogVisible.value = true
 }
 
@@ -447,11 +521,6 @@ const handleSubmit = async () => {
   if (valid !== true) return
 
   submitLoading.value = true
-  const modelLimit = modelLimitInput.value
-    .split(/[,\n]/)
-    .map(item => item.trim())
-    .filter(Boolean)
-  
   const url = '/0x/user'
   const method = 'POST'
   const payload = {
@@ -460,9 +529,10 @@ const handleSubmit = async () => {
     isolated_session: formData.isolated_session,
     mcp_isolation: formData.mcp_isolation,
     skills_isolation: formData.skills_isolation,
+    model_isolation: formData.model_isolation,
     force_chat_mode: formData.force_chat_mode,
     gptcar_list: formData.gptcar_list,
-    model_limit: modelLimit,
+    model_limit: formData.model_limit,
     remark: formData.remark,
     expired_date: formData.expired_date || null,
     daily_quota: formData.daily_quota,
@@ -562,6 +632,78 @@ const saveCapabilities = async () => {
     }
   } finally {
     capabilitySaving.value = false
+  }
+}
+
+const applyModelPolicyData = (data: any) => {
+  modelAccounts.value = data?.accounts || modelAccounts.value
+  modelItems.value = (data?.models || []).map((item: any) => ({
+    ...item,
+    enabled: Boolean(item.enabled),
+    hour_window_hours: Math.max(1, Number(item.hour_window_hours || 1)),
+    hour_limit: Math.max(0, Number(item.hour_limit || item.hourly_limit || 0)),
+    week_limit: Math.max(0, Number(item.week_limit || 0)),
+    month_limit: Math.max(0, Number(item.month_limit || 0)),
+  }))
+  modelInitialized.value = Boolean(data?.initialized)
+}
+
+const loadModelPolicy = async () => {
+  if (!modelAccountId.value) return
+  modelLoading.value = true
+  try {
+    const data = await request(
+      `/0x/user/${modelUser.id}/model-policy?account_id=${modelAccountId.value}`,
+    )
+    if (data) applyModelPolicyData(data)
+  } finally {
+    modelLoading.value = false
+  }
+}
+
+const showModelDialog = async (row: any) => {
+  modelUser.id = Number(row.id)
+  modelUser.username = row.username
+  modelAccountId.value = null
+  modelAccounts.value = []
+  modelItems.value = []
+  modelDialogVisible.value = true
+  modelLoading.value = true
+  try {
+    const data = await request(`/0x/user/${row.id}/model-policy`)
+    if (!data) return
+    applyModelPolicyData(data)
+    modelAccountId.value = modelAccounts.value[0]?.id ?? null
+  } finally {
+    modelLoading.value = false
+  }
+  if (modelAccountId.value) await loadModelPolicy()
+}
+
+const saveModelPolicy = async () => {
+  if (!modelAccountId.value) return
+  modelSaving.value = true
+  try {
+    const enabled = modelItems.value.filter(item => item.enabled)
+    const data = await request(`/0x/user/${modelUser.id}/model-policy`, 'POST', {
+      account_id: modelAccountId.value,
+      model_allowed_ids: enabled.map(item => item.id),
+      model_rate_limits: Object.fromEntries(
+        enabled.map(item => [item.id, {
+          hour_window_hours: Math.max(1, Number(item.hour_window_hours || 1)),
+          hour_limit: Math.max(0, Number(item.hour_limit || 0)),
+          week_limit: Math.max(0, Number(item.week_limit || 0)),
+          month_limit: Math.max(0, Number(item.month_limit || 0)),
+        }]),
+      ),
+    })
+    if (data) {
+      MessagePlugin.success(data.message || '普通模型权限与频率限制已保存')
+      modelDialogVisible.value = false
+      await fetchData()
+    }
+  } finally {
+    modelSaving.value = false
   }
 }
 
@@ -761,8 +903,53 @@ const batchAction = async (action: 'activate' | 'deactivate') => {
   font-size: 12px;
 }
 
+.model-policy-list {
+  display: grid;
+  max-height: 430px;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.model-policy-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(0, 3fr);
+  gap: 24px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-muted);
+}
+
+.model-rate-fields {
+  display: grid;
+  grid-template-columns: minmax(330px, 1.45fr) repeat(2, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.model-limit-field {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.model-limit-field :deep(.t-input) {
+  width: 112px;
+}
+
 @media (max-width: 760px) {
   .capability-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .model-policy-row {
+    grid-template-columns: 1fr;
+  }
+
+  .model-rate-fields {
     grid-template-columns: 1fr;
   }
 }

@@ -10,11 +10,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from app.accounts.models import User, VisitLog, PendingLogin, VisitorSession
-from app.accounts.session_authority import gateway_authorization, capability_aliases
+from app.accounts.session_authority import (
+    gateway_authorization, capability_aliases, account_model_policies_by_username,
+)
 from app.accounts.serializers import ShowVisitLogModelSerializer, AddUserAccountSerializer, UserBindChatGPTSerializer, \
     ShowUserAccountModelSerializer, BatchModelLimitSerializer, BatchUserActionSerializer, ChangePasswordSerializer
 from app.accounts.serializers import ConversationTitlePrivacySerializer
-from app.accounts.serializers import UserCapabilityPolicySerializer
+from app.accounts.serializers import UserCapabilityPolicySerializer, UserModelPolicySerializer
 from app.accounts.authentication import set_auth_cookie
 from rest_framework.authtoken.models import Token
 from app.chatgpt.models import ChatgptAccount
@@ -82,6 +84,7 @@ class GetMirrorToken(APIView):
             "skills_isolation": user.skills_isolation and user.capability_policy_initialized,
             "mcp_allowed_ids": capability_aliases(user, "mcp_allowlist"),
             "skills_allowed_ids": capability_aliases(user, "skills_allowlist"),
+            "model_policies": account_model_policies_by_username(user, user_gpt_list),
             "limits": normalized_model_limits(user),
             "chatgpt_list": chatgpt_username_list,
             "user_name": get_request_subject(request),
@@ -270,6 +273,7 @@ class UserAccountView(generics.ListCreateAPIView):
         user.isolated_session = data["isolated_session"]
         user.mcp_isolation = data.get("mcp_isolation", True)
         user.skills_isolation = data.get("skills_isolation", True)
+        user.model_isolation = data.get("model_isolation", True)
         user.remark = data["remark"]
         user.daily_quota = data.get("daily_quota", 0)
         user.monthly_quota = data.get("monthly_quota", 0)
@@ -406,6 +410,120 @@ class UserCapabilityPolicyView(APIView):
             "mcp_allowlist", "skills_allowlist",
         ])
         return Response({"message": "MCP 与 Skills 权限已保存，用户现有会话已撤销"})
+
+
+class UserModelPolicyView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminUser)
+
+    def _user(self, user_id):
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            raise ValidationError({"user_id": "用户不存在"})
+        return user
+
+    def _accounts(self, user):
+        return [
+            {"id": item.id, "label": f"{item.chatgpt_username} · {item.plan_type}"}
+            for item in ChatgptAccount.get_by_gptcar_list(user.gptcar_list)
+        ]
+
+    def _discover(self, account):
+        result = req_gateway("post", "/api/account-models", json={
+            "chatgpt_username": account.chatgpt_username,
+            "access_token": account.access_token,
+            "session_token": account.session_token,
+            "extra_cookies": account.extra_cookies,
+            "proxy_node_id": account.proxy_node_id,
+        })
+        if not isinstance(result, dict):
+            raise ValidationError("网关返回的模型清单无效")
+        return [item for item in result.get("models", []) if isinstance(item, dict)]
+
+    @staticmethod
+    def _policy(user, account_id):
+        return next((
+            item for item in (user.model_policies or [])
+            if isinstance(item, dict) and item.get("account_id") == account_id
+        ), None)
+
+    def get(self, request, user_id):
+        user = self._user(user_id)
+        accounts = self._accounts(user)
+        account_id = request.query_params.get("account_id")
+        if not account_id:
+            configured = [
+                item.get("account_id") for item in (user.model_policies or [])
+                if isinstance(item, dict) and isinstance(item.get("account_id"), int)
+            ]
+            return Response({"accounts": accounts, "configured_account_ids": configured, "models": []})
+        try:
+            account_id = int(account_id)
+        except (TypeError, ValueError):
+            raise ValidationError({"account_id": "账号 ID 无效"})
+        account = _user_capability_account(user, account_id)
+        inventory = self._discover(account)
+        policy = self._policy(user, account.id)
+        saved = {
+            str(item.get("id") or "").strip(): item
+            for item in (policy or {}).get("models", [])
+            if isinstance(item, dict) and str(item.get("id") or "").strip()
+        }
+        for item in inventory:
+            stored = saved.get(str(item.get("id") or "").strip())
+            item["enabled"] = policy is None or stored is not None
+            stored = stored or {}
+            item["hour_window_hours"] = max(1, int(stored.get("hour_window_hours") or 1))
+            item["hour_limit"] = int(stored.get("hour_limit") or stored.get("hourly_limit") or 0)
+            item["week_limit"] = int(stored.get("week_limit") or 0)
+            item["month_limit"] = int(stored.get("month_limit") or 0)
+        return Response({
+            "accounts": accounts,
+            "selected_account_id": account.id,
+            "initialized": policy is not None,
+            "models": inventory,
+        })
+
+    def post(self, request, user_id):
+        user = self._user(user_id)
+        serializer = UserModelPolicySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        account = _user_capability_account(user, serializer.validated_data["account_id"])
+        inventory = self._discover(account)
+        selected = {
+            str(item).strip().lower() for item in serializer.validated_data["model_allowed_ids"]
+            if str(item).strip()
+        }
+        requested_limits = {
+            str(key).strip().lower(): value
+            for key, value in serializer.validated_data.get("model_hourly_limits", {}).items()
+        }
+        requested_rate_limits = serializer.validated_data.get("model_rate_limits", {})
+        models = []
+        for item in inventory:
+            model_id = str(item.get("id") or "").strip().lower()
+            if not model_id or model_id not in selected:
+                continue
+            rate_limits = requested_rate_limits.get(model_id, {})
+            models.append({
+                "id": model_id,
+                "name": str(item.get("name") or model_id)[:120],
+                "hour_window_hours": int(rate_limits.get("hour_window_hours", 1)),
+                "hour_limit": int(rate_limits.get("hour_limit", requested_limits.get(model_id, 0))),
+                "week_limit": int(rate_limits.get("week_limit", 0)),
+                "month_limit": int(rate_limits.get("month_limit", 0)),
+            })
+        policies = [
+            item for item in (user.model_policies or [])
+            if isinstance(item, dict) and item.get("account_id") != account.id
+        ]
+        policies.append({
+            "account_id": account.id,
+            "chatgpt_username": account.chatgpt_username,
+            "models": models,
+        })
+        user.model_policies = policies
+        user.save(update_fields=["model_policies"])
+        return Response({"message": "普通模型权限与频率限制已保存，用户现有会话已撤销"})
 
 class UserSessionRevokeView(APIView):
     permission_classes = (IsAuthenticated, IsAdminUser)

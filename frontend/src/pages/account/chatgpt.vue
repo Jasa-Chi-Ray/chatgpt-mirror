@@ -3,6 +3,7 @@
     <t-card title="上游账号" subtitle="维护账号凭证、登录模式和连接状态" :bordered="false">
       <template #actions>
         <t-space>
+          <AccountHealthSettings />
           <t-button :loading="checkingAll" @click="handleCheckTokenExpiry()">
             <template #icon><t-icon name="search" /></template>
             一键检测
@@ -164,6 +165,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import AccountHealthSettings from './components/AccountHealthSettings.vue'
 
 const loading = ref(false)
 const submitLoading = ref(false)

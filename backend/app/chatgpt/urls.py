@@ -4,8 +4,10 @@ from django.urls import path
 from app.chatgpt.views.chatgpt import ChatGPTAccountView, ChatGPTLoginView, ChatGPTAccountEnum, ChatGPTTokenExpiryView, \
     ChatGPTRefreshTokenView, ChatGPTLoginCountResetView
 from app.chatgpt.views.gptcar import GptCarView, GptCarEnum, GptCarDetailView, GptCarUserAssignmentView
+from app.chatgpt.views.health import AccountHealthSettingsView
 
 urlpatterns = [
+    path("health-settings", AccountHealthSettingsView.as_view()),
     path("enum", ChatGPTAccountEnum.as_view()),
     path("", ChatGPTAccountView.as_view()),
     path("token-expiry", ChatGPTTokenExpiryView.as_view()),

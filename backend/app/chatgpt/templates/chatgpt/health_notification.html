@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f2;color:#252522;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f2;">
+    <tr><td align="center" style="padding:32px 12px;">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #e4e4df;border-radius:12px;">
+        <tr><td style="padding:28px 24px 0;font-size:12px;line-height:20px;letter-spacing:1px;color:#73736b;">上游账号 · 健康通知</td></tr>
+        <tr><td style="padding:18px 24px 0;">
+          {% if details %}
+          <span style="display:inline-block;padding:4px 10px;border-radius:4px;background-color:#fff2d9;color:#7d4d0b;font-size:12px;line-height:20px;">需要关注 · 复检异常</span>
+          {% else %}
+          <span style="display:inline-block;padding:4px 10px;border-radius:4px;background-color:#eaf3ed;color:#2d6540;font-size:12px;line-height:20px;">测试通知</span>
+          {% endif %}
+          <h1 style="margin:14px 0 10px;font-size:26px;line-height:36px;font-weight:600;color:#252522;">{{ heading }}</h1>
+          <p style="margin:0;font-size:15px;line-height:26px;color:#62625a;">{{ summary }}</p>
+        </td></tr>
+        {% if details %}
+        <tr><td style="padding:24px;">
+          <table width="100%" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;table-layout:fixed;">
+            {% for label, value in details %}
+            <tr>
+              <th scope="row" align="left" valign="top" width="82" style="width:82px;padding:12px 8px 12px 0;border-bottom:1px solid #ededE8;font-size:13px;font-weight:400;line-height:23px;color:#73736b;">{{ label }}</th>
+              <td valign="top" style="padding:12px 0;border-bottom:1px solid #ededE8;font-size:14px;line-height:23px;color:#252522;word-break:break-all;overflow-wrap:anywhere;{% if forloop.first %}font-weight:600;{% endif %}">{{ value }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+        </td></tr>
+        <tr><td style="padding:0 24px 26px;">
+          <p style="margin:0 0 8px;font-size:14px;line-height:24px;color:#252522;font-weight:600;">建议处理</p>
+          <p style="margin:0;font-size:14px;line-height:25px;color:#62625a;">进入管理后台的「上游账号」页面，检查该账号的凭据、代理及诊断结果。检测异常不代表账号一定被封禁。</p>
+        </td></tr>
+        {% else %}
+        <tr><td style="padding:20px 24px 28px;font-size:14px;line-height:25px;color:#62625a;">收到这封邮件，说明当前配置能够向此邮箱投递通知。这是测试邮件，不代表任何账号发生异常。</td></tr>
+        {% endif %}
+        <tr><td style="padding:18px 24px;border-top:1px solid #eaeae5;font-size:12px;line-height:21px;color:#797971;">
+          此邮件由账号健康检测服务自动发送，无需回复。<br>
+          {% if details %}持续异常期间不重复提醒，恢复后再次异常会重新通知。{% else %}异常通知也将发送至当前收件邮箱。{% endif %}
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

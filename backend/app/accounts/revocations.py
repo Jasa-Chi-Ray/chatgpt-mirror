@@ -16,6 +16,7 @@ from app.utils import req_gateway
 POLICY_FIELDS = ("username", "password", "is_active", "expired_date", "gptcar_list", "model_limit",
                  "isolated_session", "mcp_isolation", "skills_isolation", "mcp_allowlist",
                  "skills_allowlist", "capability_policy_initialized", "force_chat_mode",
+                 "model_isolation", "model_policies",
                  "daily_quota", "monthly_quota",
                  "is_staff", "is_superuser")
 
