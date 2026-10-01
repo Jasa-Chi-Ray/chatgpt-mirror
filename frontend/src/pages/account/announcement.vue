@@ -30,9 +30,10 @@
           <span class="content-preview">{{ row.content }}</span>
         </template>
         <template #status="{ row }">
-          <t-tag :theme="statusMeta(row.status).theme">
-            {{ statusMeta(row.status).label }}
-          </t-tag>
+          <t-space :size="4">
+            <t-tag :theme="statusMeta(row.status).theme">{{ statusMeta(row.status).label }}</t-tag>
+            <t-tag v-if="row.block_chatgpt_login" theme="danger" variant="light">阻止登录</t-tag>
+          </t-space>
         </template>
         <template #schedule="{ row }">
           <div class="schedule-cell">
@@ -161,6 +162,12 @@
             <span class="form-help">启用后仅在设定的开始和结束时间内作为当前公告展示；到期后自动进入历史公告。</span>
           </template>
         </t-form-item>
+        <t-form-item label="阻止登录" name="block_chatgpt_login">
+          <t-switch v-model="formData.block_chatgpt_login" />
+          <template #help>
+            <span class="form-help">公告生效期间，{{ formData.scope === 'global' ? '所有用户' : '目标用户' }}不能进入 ChatGPT；已有 ChatGPT 会话也会立即失效。站点账号仍可登录查看公告。</span>
+          </template>
+        </t-form-item>
       </t-form>
     </t-dialog>
   </div>
@@ -182,6 +189,7 @@ type Announcement = {
   target_user_id: number | null
   target_username?: string
   is_active: boolean
+  block_chatgpt_login: boolean
   start_at: string
   end_at: string | null
   display_timezone: string
@@ -221,6 +229,7 @@ const formData = reactive({
   scope: 'global' as AnnouncementScope,
   target_user_id: null as number | null,
   is_active: true,
+  block_chatgpt_login: false,
   start_at: '',
   end_at: '',
   display_timezone: 'Asia/Shanghai',
@@ -265,6 +274,7 @@ const resetForm = () => {
     scope: 'global',
     target_user_id: null,
     is_active: true,
+    block_chatgpt_login: false,
     start_at: '',
     end_at: '',
     display_timezone: 'Asia/Shanghai',
@@ -286,6 +296,7 @@ const showEditDialog = (row: Announcement) => {
     scope: row.scope,
     target_user_id: row.target_user_id,
     is_active: row.is_active,
+    block_chatgpt_login: row.block_chatgpt_login,
     display_timezone: row.display_timezone || 'Asia/Shanghai',
     start_at: formatDateInput(row.start_at, row.display_timezone || 'Asia/Shanghai'),
     end_at: row.end_at ? formatDateInput(row.end_at, row.display_timezone || 'Asia/Shanghai') : '',
@@ -300,6 +311,7 @@ const announcementPayload = (overrides: Partial<Announcement> = {}) => ({
   scope: formData.scope,
   target_user_id: formData.scope === 'personal' ? formData.target_user_id : null,
   is_active: formData.is_active,
+  block_chatgpt_login: formData.block_chatgpt_login,
   start_at: formData.start_at ? zonedDateTimeToIso(formData.start_at, formData.display_timezone) : null,
   end_at: formData.end_at ? zonedDateTimeToIso(formData.end_at, formData.display_timezone) : null,
   display_timezone: formData.display_timezone,
@@ -355,6 +367,7 @@ const toggleAnnouncement = async (row: Announcement) => {
     scope: row.scope,
     target_user_id: row.target_user_id,
     is_active: !row.is_active,
+    block_chatgpt_login: row.block_chatgpt_login,
     start_at: row.start_at,
     end_at: row.end_at,
     display_timezone: row.display_timezone,

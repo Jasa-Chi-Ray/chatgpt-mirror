@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { detectBrowserIp } from '@/api/browser-ip'
 
 const clearAccessibleCookies = () => {
   const cookies = document.cookie.split(';')
@@ -9,6 +10,26 @@ const clearAccessibleCookies = () => {
     if (!name) continue
     document.cookie = `${name}=; Path=/; Max-Age=0`
   }
+}
+
+const parseJsonResponse = async (response: Response, fallbackMessage: string) => {
+  const text = await response.text()
+  if (!text.trim()) {
+    throw new Error(`${fallbackMessage}（HTTP ${response.status}，响应为空）`)
+  }
+
+  let data: any
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error(`${fallbackMessage}（HTTP ${response.status}，响应不是有效 JSON）`)
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.message || data?.detail || `${fallbackMessage}（HTTP ${response.status}）`)
+  }
+
+  return data
 }
 
 export const useUserStore = defineStore('user', () => {
@@ -32,13 +53,13 @@ export const useUserStore = defineStore('user', () => {
 
   const prepareCsrf = async () => {
     const response = await fetch('/0x/user/version-cfg', { cache: 'no-store' })
-    if (!response.ok) throw new Error('无法准备登录验证，请重试')
-    const config = await response.json()
+    const config = await parseJsonResponse(response, '无法准备登录验证')
     if (!config.csrf_token) throw new Error('无法准备登录验证，请重试')
     setCsrfToken(config.csrf_token)
   }
 
   const login = async (url: string, data: any, beforeConfirm: () => void = () => {}) => {
+    const browserIpPromise = detectBrowserIp()
     await prepareCsrf()
     const response = await fetch(url, {
       method: 'POST',
@@ -49,25 +70,17 @@ export const useUserStore = defineStore('user', () => {
       body: JSON.stringify(data)
     })
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || '登录失败')
-    }
-
-    const prepared = await response.json()
+    const prepared = await parseJsonResponse(response, '登录失败')
     if (!prepared.login_ticket) throw new Error('登录确认无效，请重试')
+    const browserIp = await browserIpPromise
     // No authenticated cookie exists before this callback accepts the current challenge.
     beforeConfirm()
     const confirmation = await fetch('/0x/user/login-confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken.value },
-      body: JSON.stringify({ login_ticket: prepared.login_ticket })
+      body: JSON.stringify({ login_ticket: prepared.login_ticket, browser_ip: browserIp })
     })
-    if (!confirmation.ok) {
-      const error = await confirmation.json()
-      throw new Error(error.message || '登录确认失败，请重新验证')
-    }
-    const result = await confirmation.json()
+    const result = await parseJsonResponse(confirmation, '登录确认失败')
     
     authenticated.value = Boolean(result.authenticated)
     setUsername(result.username || data.username || '')

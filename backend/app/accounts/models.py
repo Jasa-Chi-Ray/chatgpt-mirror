@@ -30,6 +30,9 @@ class User(AbstractUser):
     daily_quota = models.PositiveIntegerField(default=0, verbose_name="每日配额")
     monthly_quota = models.PositiveIntegerField(default=0, verbose_name="每月配额")
     force_chat_mode = models.BooleanField(default=True, verbose_name="自动退出 Work 模式")
+    hide_chat_work_toggle = models.BooleanField(default=False, verbose_name="隐藏聊天/工作切换栏")
+    hide_library = models.BooleanField(default=False, verbose_name="隐藏资料库")
+    hide_suggestions = models.BooleanField(default=False, verbose_name="隐藏建议")
     allow_admin_view_conversation_titles = models.BooleanField(
         default=False,
         verbose_name="允许管理员查看对话标题",
@@ -83,6 +86,7 @@ class Announcement(models.Model):
         verbose_name="目标用户",
     )
     is_active = models.BooleanField(default=True, verbose_name="启用")
+    block_chatgpt_login = models.BooleanField(default=False, verbose_name="阻止进入 ChatGPT")
     start_at = models.DateTimeField(default=timezone.now, verbose_name="开始时间")
     end_at = models.DateTimeField(null=True, blank=True, verbose_name="结束时间")
     display_timezone = models.CharField(
@@ -125,6 +129,9 @@ class VisitLog(models.Model):
     log_type = models.CharField(max_length=20, verbose_name="登录类型")
     created_at = models.IntegerField(verbose_name="登录时间")
     ip = models.GenericIPAddressField(verbose_name="登录IP")
+    browser_ip = models.GenericIPAddressField(
+        null=True, blank=True, verbose_name="浏览器检测IP（参考）"
+    )
     user_agent = models.TextField(verbose_name="User-Agent")
 
     @classmethod

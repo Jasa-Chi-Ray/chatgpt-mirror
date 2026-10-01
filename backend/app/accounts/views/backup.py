@@ -96,6 +96,9 @@ def _export_django_data():
                 "daily_quota": user.daily_quota,
                 "monthly_quota": user.monthly_quota,
                 "force_chat_mode": user.force_chat_mode,
+                "hide_chat_work_toggle": user.hide_chat_work_toggle,
+                "hide_library": user.hide_library,
+                "hide_suggestions": user.hide_suggestions,
                 "allow_admin_view_conversation_titles": user.allow_admin_view_conversation_titles,
                 "groups": list(user.groups.values_list("name", flat=True)),
                 "user_permissions": [
@@ -112,6 +115,7 @@ def _export_django_data():
                 "scope": item.scope,
                 "target_username": item.target_user.username if item.target_user else None,
                 "is_active": item.is_active,
+                "block_chatgpt_login": item.block_chatgpt_login,
                 "start_at": _iso(item.start_at),
                 "end_at": _iso(item.end_at),
                 "display_timezone": item.display_timezone,
@@ -156,7 +160,7 @@ def _export_django_data():
         ),
         "visit_logs": list(
             VisitLog.objects.order_by("id").values(
-                "id", "username", "chatgpt_username", "log_type", "created_at", "ip", "user_agent"
+                "id", "username", "chatgpt_username", "log_type", "created_at", "ip", "browser_ip", "user_agent"
             )
         ),
         "tokens": [

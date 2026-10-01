@@ -118,9 +118,27 @@
           </template>
         </t-form-item>
         <t-form-item label="自动退出 Work" name="force_chat_mode">
-          <t-switch v-model="formData.force_chat_mode" />
+          <t-switch v-model="formData.force_chat_mode" @change="handleForceChatModeChange" />
           <template #help>
             <span class="form-help">开启后检测到 Work 模式会自动点击“聊天 / Chat”切回聊天模式</span>
+          </template>
+        </t-form-item>
+        <t-form-item v-if="formData.force_chat_mode" label="隐藏切换栏" name="hide_chat_work_toggle">
+          <t-switch v-model="formData.hide_chat_work_toggle" />
+          <template #help>
+            <span class="form-help">隐藏聊天/工作切换栏；进入 Work 时显示切换栏并自动点击聊天，切回后再隐藏</span>
+          </template>
+        </t-form-item>
+        <t-form-item label="隐藏资料库" name="hide_library">
+          <t-switch v-model="formData.hide_library" />
+          <template #help>
+            <span class="form-help">隐藏侧边栏资料库，并禁止访问资料库文件列表接口</span>
+          </template>
+        </t-form-item>
+        <t-form-item label="隐藏建议" name="hide_suggestions">
+          <t-switch v-model="formData.hide_suggestions" />
+          <template #help>
+            <span class="form-help">隐藏 ChatGPT 首页输入框下方的建议卡片</span>
           </template>
         </t-form-item>
         <t-form-item label="过期日期" name="expired_date">
@@ -425,6 +443,9 @@ const formData = reactive({
   skills_isolation: true,
   model_isolation: true,
   force_chat_mode: true,
+  hide_chat_work_toggle: false,
+  hide_library: false,
+  hide_suggestions: false,
   expired_date: '',
   gptcar_list: [] as number[],
   model_limit: [] as string[],
@@ -432,6 +453,10 @@ const formData = reactive({
   daily_quota: 0,
   monthly_quota: 0
 })
+
+const handleForceChatModeChange = (value: unknown) => {
+  if (value !== true) formData.hide_chat_work_toggle = false
+}
 
 const formRules = {
   username: [{ required: true, message: '请输入用户名' }]
@@ -484,6 +509,9 @@ const showAddDialog = () => {
     skills_isolation: true,
     model_isolation: true,
     force_chat_mode: true,
+    hide_chat_work_toggle: false,
+    hide_library: false,
+    hide_suggestions: false,
     expired_date: '',
     gptcar_list: [],
     model_limit: [],
@@ -506,6 +534,9 @@ const showEditDialog = (row: any) => {
     skills_isolation: row.skills_isolation ?? true,
     model_isolation: row.model_isolation ?? true,
     force_chat_mode: row.force_chat_mode ?? true,
+    hide_chat_work_toggle: (row.force_chat_mode ?? true) && (row.hide_chat_work_toggle ?? false),
+    hide_library: row.hide_library ?? false,
+    hide_suggestions: row.hide_suggestions ?? false,
     expired_date: row.expired_date || '',
     gptcar_list: row.gptcar_list || [],
     model_limit: row.model_limit || [],
@@ -531,6 +562,9 @@ const handleSubmit = async () => {
     skills_isolation: formData.skills_isolation,
     model_isolation: formData.model_isolation,
     force_chat_mode: formData.force_chat_mode,
+    hide_chat_work_toggle: formData.force_chat_mode && formData.hide_chat_work_toggle,
+    hide_library: formData.hide_library,
+    hide_suggestions: formData.hide_suggestions,
     gptcar_list: formData.gptcar_list,
     model_limit: formData.model_limit,
     remark: formData.remark,

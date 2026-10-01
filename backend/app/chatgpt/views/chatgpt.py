@@ -17,7 +17,8 @@ from app.settings import CHATGPT_GATEWAY_URL
 from app.utils import get_request_subject, save_visit_log, req_gateway
 from app.accounts.models import User
 from app.accounts.session_authority import gateway_authorization, capability_aliases, account_model_policy
-from rest_framework.exceptions import ValidationError
+from app.accounts.views.announcements import active_login_block_for
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 DEFAULT_REFRESH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 
@@ -200,6 +201,8 @@ class ChatGPTLoginView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
+        if active_login_block_for(request.user):
+            raise PermissionDenied("公告生效期间，暂不能进入 ChatGPT")
         serializer = ChatGPTLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user_gpt_list = ChatgptAccount.get_by_gptcar_list(request.user.gptcar_list)
@@ -249,6 +252,9 @@ class ChatGPTLoginView(APIView):
             "daily_quota": request.user.daily_quota,
             "monthly_quota": request.user.monthly_quota,
             "force_chat_mode": request.user.force_chat_mode,
+            "hide_chat_work_toggle": request.user.hide_chat_work_toggle,
+            "hide_library": request.user.hide_library,
+            "hide_suggestions": request.user.hide_suggestions,
         }
         payload.update(account_model_policy(request.user, chatgpt))
         # print(payload)

@@ -12,7 +12,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APIRequestFactory
 
 from app.accounts.authentication import AUTH_COOKIE_NAME
-from app.accounts.models import PendingLogin, User, VisitorSession, GatewayRevocation
+from app.accounts.models import PendingLogin, User, VisitorSession, GatewayRevocation, VisitLog
 from app.accounts.session_authority import authorization_is_active, gateway_authorization, authorization_details, authorization_version
 from app.accounts.views import revoke_user_sessions
 from app.accounts.views.login import LoginIpRateThrottle
@@ -79,7 +79,9 @@ class GatewayLeaseTests(TransactionTestCase):
 
     def test_each_permission_change_emits_revocation(self):
         changes = {"gptcar_list": [2], "model_limit": ["m"], "isolated_session": False,
-                   "force_chat_mode": False, "daily_quota": 2, "monthly_quota": 4,
+                   "force_chat_mode": False, "hide_chat_work_toggle": True, "hide_library": True,
+                   "hide_suggestions": True,
+                   "daily_quota": 2, "monthly_quota": 4,
                    "is_staff": True, "is_superuser": True, "password": "reset-hash",
                    "expired_date": timezone.localdate() + timedelta(days=1), "is_active": False}
         for field, value in changes.items():
@@ -183,6 +185,17 @@ class LoginSecurityTests(TestCase):
         self.assertTrue(confirmed.cookies[AUTH_COOKIE_NAME]["httponly"])
         replay = self.post("/0x/user/login-confirm", {"login_ticket": ticket})
         self.assertEqual(replay.status_code, 400)
+
+    def test_confirmation_records_browser_ip_without_overriding_server_ip(self):
+        prepared = self.prepare()
+        confirmed = self.post("/0x/user/login-confirm", {
+            "login_ticket": prepared.data["login_ticket"],
+            "browser_ip": "2001:db8::9",
+        }, HTTP_X_CHATGPT_MIRROR_CLIENT_IP="172.18.0.1")
+        self.assertEqual(confirmed.status_code, 200, confirmed.data)
+        log = VisitLog.objects.get(username=self.user.username, log_type="login")
+        self.assertEqual(log.ip, "172.18.0.1")
+        self.assertEqual(log.browser_ip, "2001:db8::9")
 
     def test_confirmation_is_bound_to_browser_csrf_secret(self):
         prepared = self.prepare()

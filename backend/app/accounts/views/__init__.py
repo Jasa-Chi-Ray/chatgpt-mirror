@@ -4,7 +4,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.middleware.csrf import get_token, rotate_token
 from rest_framework import generics
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -74,6 +74,9 @@ class GetMirrorToken(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
+        from app.accounts.views.announcements import active_login_block_for
+        if active_login_block_for(request.user):
+            raise PermissionDenied("公告生效期间，暂不能进入 ChatGPT")
         user = request.user
 
         user_gpt_list = ChatgptAccount.get_by_gptcar_list(user.gptcar_list)
@@ -92,6 +95,9 @@ class GetMirrorToken(APIView):
             "daily_quota": user.daily_quota,
             "monthly_quota": user.monthly_quota,
             "force_chat_mode": user.force_chat_mode,
+            "hide_chat_work_toggle": user.hide_chat_work_toggle,
+            "hide_library": user.hide_library,
+            "hide_suggestions": user.hide_suggestions,
         })
         for line in res:
             obj = ChatgptAccount.objects.filter(chatgpt_username=line["chatgpt_username"]).first()
@@ -279,6 +285,11 @@ class UserAccountView(generics.ListCreateAPIView):
         user.monthly_quota = data.get("monthly_quota", 0)
         if "force_chat_mode" in data:
             user.force_chat_mode = data["force_chat_mode"]
+        for field in ("hide_chat_work_toggle", "hide_library", "hide_suggestions"):
+            if field in data:
+                setattr(user, field, data[field])
+        if not user.force_chat_mode:
+            user.hide_chat_work_toggle = False
         user.save()
 
         if "force_chat_mode" in data:

@@ -126,10 +126,23 @@ def clean_int_list(data_list):
     return new_list
 
 
+def get_browser_ip(request):
+    # Untrusted browser report: keep separate from get_client_ip and all access controls.
+    data = getattr(request, "data", {})
+    value = data.get("browser_ip") if hasattr(data, "get") else None
+    if not isinstance(value, str) or len(value) > 45 or "%" in value:
+        return None
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
 def save_visit_log(request, log_type, chatgpt_username=None):
 
     VisitLog.save_data({
         "ip": get_client_ip(request),
+        "browser_ip": get_browser_ip(request),
         "log_type": log_type,
         "chatgpt_username": chatgpt_username,
         "username": request.user.username,

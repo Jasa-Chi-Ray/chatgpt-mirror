@@ -37,6 +37,11 @@
             {{ getLogTypeText(row.log_type) }}
           </t-tag>
         </template>
+        <template #browser_ip="{ row }">
+          <span :title="row.browser_ip ? '浏览器上报的公网出口 IP，仅供参考' : '未获取、检测失败或历史记录'">
+            {{ row.browser_ip || '未获取' }}
+          </span>
+        </template>
         <template #created_at="{ row }">
           {{ formatTime(row.created_at) }}
         </template>
@@ -68,7 +73,8 @@ const columns = [
   { colKey: 'username', title: '用户名', cell: 'username' },
   { colKey: 'chatgpt_username', title: '上游账号', ellipsis: true },
   { colKey: 'log_type', title: '操作类型', cell: 'log_type', width: 120 },
-  { colKey: 'ip', title: 'IP 地址', width: 150 },
+  { colKey: 'ip', title: '服务端识别 IP', width: 180, ellipsis: true },
+  { colKey: 'browser_ip', title: '浏览器检测 IP（参考）', cell: 'browser_ip', width: 220, ellipsis: true },
   { colKey: 'created_at', title: '时间', cell: 'created_at', width: 180 },
   { colKey: 'user_agent', title: 'User Agent', ellipsis: true }
 ]

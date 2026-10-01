@@ -24,6 +24,8 @@ def policy_digest(user):
     return digest(json.dumps({
         "pools": user.gptcar_list, "models": user.model_limit,
         "isolation": user.isolated_session, "force_chat": user.force_chat_mode,
+        "hide_chat_work_toggle": user.hide_chat_work_toggle, "hide_library": user.hide_library,
+        "hide_suggestions": user.hide_suggestions,
         "mcp_isolation": user.mcp_isolation, "skills_isolation": user.skills_isolation,
         "model_isolation": user.model_isolation, "model_policies": user.model_policies,
         "capability_policy_initialized": user.capability_policy_initialized,

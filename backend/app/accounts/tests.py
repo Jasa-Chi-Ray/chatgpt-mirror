@@ -1,4 +1,5 @@
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from django.db import connection
@@ -14,6 +15,7 @@ from app.accounts.views import (
     ChangePasswordView,
     ConversationTitlePrivacyView,
     CustomScriptConfigView,
+    GetMirrorToken,
     UserAccountView,
     UserConversationStatisticsView,
     UserSessionRevokeView,
@@ -21,7 +23,7 @@ from app.accounts.views import (
 )
 from app.accounts.authentication import AUTH_COOKIE_NAME, ExpiringCookieTokenAuthentication
 from app.accounts.views.cfg import AccessControlView, PoliticalModerationConfigView
-from app.accounts.views.announcements import AnnouncementAdminView, CurrentAnnouncementView
+from app.accounts.views.announcements import AnnouncementAdminView, CurrentAnnouncementView, active_login_block_for
 from app.accounts.views.login import (
     AccountLogin,
     AccountLogout,
@@ -41,7 +43,7 @@ from app.chatgpt.serializers import ShowChatgptTokenSerializer
 from app.chatgpt.views.chatgpt import ChatGPTLoginView, ChatGPTLoginCountResetView
 from app.chatgpt.views.gptcar import GptCarDetailView, GptCarUserAssignmentView
 from app.settings import ADMIN_USERNAME, FREE_ACCOUNT_USERNAME
-from app.utils import get_client_ip, req_gateway
+from app.utils import get_browser_ip, get_client_ip, req_gateway
 
 
 class UnifiedBackupValidationTests(TestCase):
@@ -109,6 +111,62 @@ class SecurityRegressionTests(TestCase):
     def test_force_chat_mode_is_enabled_for_new_users(self):
         user = User.objects.create_user(username="work-mode-user", password="Strong-password-123!")
         self.assertTrue(user.force_chat_mode)
+        self.assertFalse(user.hide_chat_work_toggle)
+        self.assertFalse(user.hide_library)
+        self.assertFalse(user.hide_suggestions)
+
+    def test_user_visibility_settings_round_trip_and_omission(self):
+        admin = User.objects.create_superuser(username="visibility-admin", password="Strong-password-123!")
+        user = User.objects.create_user(username="visibility-user", password="Strong-password-123!")
+        payload = {"username": user.username, "is_active": True, "isolated_session": True,
+                   "hide_chat_work_toggle": True, "hide_library": True,
+                   "hide_suggestions": True}
+        request = self.factory.post("/0x/user/", payload, format="json")
+        force_authenticate(request, user=admin)
+        self.assertEqual(UserAccountView.as_view()(request).status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.hide_chat_work_toggle)
+        self.assertTrue(user.hide_library)
+        self.assertTrue(user.hide_suggestions)
+        from app.accounts.serializers import ShowUserAccountModelSerializer
+        data = ShowUserAccountModelSerializer(user).data
+        self.assertTrue(data["hide_chat_work_toggle"])
+        self.assertTrue(data["hide_library"])
+        self.assertTrue(data["hide_suggestions"])
+        from app.accounts.views.backup import _export_django_data
+        backup_user = next(item for item in _export_django_data()["users"] if item["username"] == user.username)
+        self.assertTrue(backup_user["hide_chat_work_toggle"])
+        self.assertTrue(backup_user["hide_library"])
+        self.assertTrue(backup_user["hide_suggestions"])
+        del payload["hide_chat_work_toggle"]
+        del payload["hide_library"]
+        del payload["hide_suggestions"]
+        request = self.factory.post("/0x/user/", payload, format="json")
+        force_authenticate(request, user=admin)
+        self.assertEqual(UserAccountView.as_view()(request).status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.hide_library)
+        self.assertTrue(user.hide_chat_work_toggle)
+        self.assertTrue(user.hide_suggestions)
+
+    @patch("app.accounts.views.req_gateway", return_value={})
+    def test_hidden_toggle_requires_force_chat_mode(self, gateway):
+        admin = User.objects.create_superuser(username="toggle-admin", password="Strong-password-123!")
+        user = User.objects.create_user(username="toggle-user", password="Strong-password-123!",
+                                        force_chat_mode=True, hide_chat_work_toggle=True, hide_library=True)
+        for extra in [
+            {"force_chat_mode": False},
+            {"hide_chat_work_toggle": True},
+            {"force_chat_mode": False, "hide_chat_work_toggle": True},
+        ]:
+            payload = {"username": user.username, "is_active": True, "isolated_session": True, **extra}
+            request = self.factory.post("/0x/user/", payload, format="json")
+            force_authenticate(request, user=admin)
+            self.assertEqual(UserAccountView.as_view()(request).status_code, 200)
+            user.refresh_from_db()
+            self.assertFalse(user.force_chat_mode)
+            self.assertFalse(user.hide_chat_work_toggle)
+            self.assertTrue(user.hide_library)
 
     @patch("app.accounts.views.req_gateway", side_effect=ValidationError("网关不可用"))
     def test_work_mode_sync_failure_is_not_reported_as_success(self, gateway):
@@ -305,6 +363,48 @@ class SecurityRegressionTests(TestCase):
             REMOTE_ADDR="2001:db8::9",
         )
         self.assertEqual(get_client_ip(request), "2001:db8::9")
+
+    def test_browser_ip_normalizes_addresses_and_ignores_invalid_reports(self):
+        for raw, expected in [
+            (" 203.0.113.9 ", "203.0.113.9"),
+            ("2001:0DB8::9", "2001:db8::9"),
+            (None, None), ("", None), ([], None), (123, None),
+            ("invalid", None), ("999.1.1.1", None),
+            ("203.0.113.9, 172.18.0.1", None), ("fe80::1%eth0", None),
+            ("a" * 46, None),
+        ]:
+            with self.subTest(raw=raw):
+                self.assertEqual(get_browser_ip(SimpleNamespace(data={"browser_ip": raw})), expected)
+        self.assertIsNone(get_browser_ip(SimpleNamespace()))
+
+    def test_browser_ip_is_separate_in_log_api_and_backup(self):
+        from app.accounts.serializers import ShowVisitLogModelSerializer
+        from app.accounts.views.backup import _export_django_data
+        from app.utils import save_visit_log
+
+        request = SimpleNamespace(
+            data={"browser_ip": "203.0.113.9"},
+            META={"HTTP_X_CHATGPT_MIRROR_CLIENT_IP": "172.18.0.1"},
+            headers={"User-Agent": "browser-ip-test"},
+            user=SimpleNamespace(username="browser-ip-user"),
+        )
+        for log_type in ("login", "choose-gpt"):
+            save_visit_log(request, log_type)
+            log = VisitLog.objects.latest("id")
+            self.assertEqual(log.ip, "172.18.0.1")
+            self.assertEqual(log.browser_ip, "203.0.113.9")
+            data = ShowVisitLogModelSerializer(log).data
+            self.assertEqual(data["ip"], "172.18.0.1")
+            self.assertEqual(data["browser_ip"], "203.0.113.9")
+        exported = _export_django_data()["visit_logs"]
+        self.assertTrue(all(log["browser_ip"] == "203.0.113.9" for log in exported))
+        legacy = dict(exported[0])
+        legacy.pop("id")
+        legacy.pop("browser_ip")
+        self.assertIsNone(VisitLog.objects.create(**legacy).browser_ip)
+        request.data = {"browser_ip": "invalid"}
+        save_visit_log(request, "login")
+        self.assertIsNone(VisitLog.objects.latest("id").browser_ip)
 
     def test_access_control_requires_admin(self):
         user = User.objects.create_user(username="normal-user", password="password-123")
@@ -983,7 +1083,94 @@ class AnnouncementTests(TestCase):
         admin_request = self.factory.get("/0x/user/announcements/current")
         force_authenticate(admin_request, user=self.admin)
         admin_response = CurrentAnnouncementView.as_view()(admin_request)
-        self.assertEqual(admin_response.data, {"global": [], "personal": [], "history": []})
+        self.assertEqual([item["id"] for item in admin_response.data["history"]], [history.id])
+        self.assertFalse(admin_response.data["global"])
+
+    @patch("app.accounts.views.announcements.req_gateway", return_value={"synced": True})
+    def test_global_block_syncs_and_denies_chatgpt_but_preserves_announcements(self, gateway):
+        request = self.factory.post(
+            "/0x/user/announcements",
+            {"title": "维护公告", "content": "暂停进入 ChatGPT", "scope": "global",
+             "is_active": True, "block_chatgpt_login": True},
+            format="json",
+        )
+        force_authenticate(request, user=self.admin)
+        response = AnnouncementAdminView.as_view()(request)
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data["block_chatgpt_login"])
+        self.assertTrue(active_login_block_for(self.admin))
+        self.assertTrue(active_login_block_for(self.user))
+        self.assertTrue(active_login_block_for(self.other_user))
+        rules = gateway.call_args.kwargs["json"]["rules"]
+        self.assertEqual(len(rules), 1)
+        self.assertEqual(rules[0]["scope"], "global")
+        self.assertIsNone(rules[0]["target_user"])
+
+        current_request = self.factory.get("/0x/user/announcements/current")
+        force_authenticate(current_request, user=self.user)
+        current_response = CurrentAnnouncementView.as_view()(current_request)
+        self.assertEqual(current_response.status_code, 200)
+        self.assertEqual(current_response.data["global"][0]["id"], response.data["id"])
+
+        chatgpt_request = self.factory.post("/0x/chatgpt/login", {}, format="json")
+        force_authenticate(chatgpt_request, user=self.user)
+        self.assertEqual(ChatGPTLoginView.as_view()(chatgpt_request).status_code, 403)
+        token_request = self.factory.get("/0x/user/get-mirror-token")
+        force_authenticate(token_request, user=self.user)
+        self.assertEqual(GetMirrorToken.as_view()(token_request).status_code, 403)
+
+    @patch("app.accounts.views.announcements.req_gateway", return_value={"synced": True})
+    def test_personal_block_only_affects_target_and_disabling_resyncs(self, gateway):
+        create_request = self.factory.post(
+            "/0x/user/announcements",
+            {"title": "个人维护", "content": "请稍后再试", "scope": "personal",
+             "target_user_id": self.user.id, "block_chatgpt_login": True},
+            format="json",
+        )
+        force_authenticate(create_request, user=self.admin)
+        created = AnnouncementAdminView.as_view()(create_request)
+        self.assertEqual(created.status_code, 201)
+        self.assertTrue(active_login_block_for(self.user))
+        self.assertFalse(active_login_block_for(self.other_user))
+        self.assertFalse(active_login_block_for(self.admin))
+        self.assertEqual(gateway.call_args.kwargs["json"]["rules"][0]["target_user"], self.user.username)
+
+        update_request = self.factory.put(
+            "/0x/user/announcements",
+            {"id": created.data["id"], "title": "个人维护", "content": "请稍后再试",
+             "scope": "personal", "target_user_id": self.user.id,
+             "block_chatgpt_login": False},
+            format="json",
+        )
+        force_authenticate(update_request, user=self.admin)
+        self.assertEqual(AnnouncementAdminView.as_view()(update_request).status_code, 200)
+        self.assertFalse(active_login_block_for(self.user))
+        self.assertEqual(gateway.call_args.kwargs["json"]["rules"], [])
+
+    def test_block_only_applies_during_announcement_schedule(self):
+        now = timezone.now()
+        Announcement.objects.create(
+            title="未来公告", content="稍后生效", scope=Announcement.SCOPE_GLOBAL,
+            block_chatgpt_login=True, start_at=now + timedelta(hours=1), created_by=self.admin,
+        )
+        Announcement.objects.create(
+            title="过期公告", content="已结束", scope=Announcement.SCOPE_GLOBAL,
+            block_chatgpt_login=True, start_at=now - timedelta(days=2),
+            end_at=now - timedelta(days=1), created_by=self.admin,
+        )
+        self.assertFalse(active_login_block_for(self.user, now))
+
+    @patch("app.accounts.views.announcements.req_gateway", return_value={"synced": False})
+    def test_failed_gateway_sync_rolls_back_blocking_announcement(self, _gateway):
+        request = self.factory.post(
+            "/0x/user/announcements",
+            {"title": "未发布", "content": "同步失败", "scope": "global",
+             "block_chatgpt_login": True},
+            format="json",
+        )
+        force_authenticate(request, user=self.admin)
+        self.assertEqual(AnnouncementAdminView.as_view()(request).status_code, 400)
+        self.assertFalse(Announcement.objects.filter(title="未发布").exists())
 
     def test_announcement_end_time_must_be_after_start_time(self):
         now = timezone.now()
