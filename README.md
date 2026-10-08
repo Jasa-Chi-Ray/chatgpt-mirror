@@ -207,6 +207,13 @@ client_header_buffer_size 64k;
 
 ## 更新日志
 
+### 2026-10
+
+- 添加项目隔离功能
+- 添加对 GPT6 系列支持
+- 添加对新版 GPT6 系列 和 ChatGPT Intelligent UI
+- 减少 GPT6 使用 ChatGPT Intelligent UI 的降智可能
+
 ### 2026-09
 
 - 增加大量安全性功能
@@ -233,10 +240,7 @@ client_header_buffer_size 64k;
 - 增加新的实验性最终方案（curl-impersonate）
 - 优化降智检测和必要的应对方案
 - 大幅度减少 Pro 模型的降智几率
-- 添加项目隔离功能
-- 添加对 GPT6 系列支持
-- 添加对新版 GPT6 系列 和 ChatGPT Intelligent UI
-- 减少 GPT6 使用 ChatGPT Intelligent UI 的降智可能
+
 
 ### 2026-07
 
