@@ -1,6 +1,6 @@
 # ChatGPT Mirror
 
-### 仅适合个人学习和个人研究用图，正在维护，请勿部署
+### 仅适合个人学习和个人研究用图
 
 
 项目重点关注多用户使用、共享账号隔离、移动端兼容、弱网体验和日常运维，**仅适合个人学习、内部研究及其他获得合法授权的非商业场景。**
@@ -213,6 +213,7 @@ client_header_buffer_size 64k;
 - 添加对 GPT6 系列支持
 - 添加对新版 GPT6 系列 和 ChatGPT Intelligent UI
 - 减少 GPT6 使用 ChatGPT Intelligent UI 的降智可能
+- 优化组件适配性
 
 ### 2026-09
 
