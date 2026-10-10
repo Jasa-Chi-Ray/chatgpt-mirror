@@ -26,9 +26,11 @@ services:
       CHATGPT_BASE_URL: "${CHATGPT_BASE_URL:-https://chatgpt.com}"
       CHATGPT_CDN_BASE_URL: "${CHATGPT_CDN_BASE_URL:-https://cdn.oaistatic.com}"
       CHATGPT_AB_BASE_URL: "${CHATGPT_AB_BASE_URL:-https://ab.chatgpt.com}"
+      DIL_LOCAL_DIR: "${DIL_LOCAL_DIR-./dil}"
       CF_BYPASS_URL: "http://cfbypass:8000"
       CF_BYPASS_PROXY_SERVER: "${CF_BYPASS_PROXY_SERVER:-}"
       REQUEST_TIMEOUT_SECS: "${REQUEST_TIMEOUT_SECS:-180}"
+      TRUSTED_PROXY_IPS: "${TRUSTED_PROXY_IPS:-}"
       CURL_IMPERSONATE: "${CURL_IMPERSONATE_PROFILE:-chrome146}"
       CURL_IMPERSONATE_HEADERS: "no"
       RUST_LOG: "${RUST_LOG:-info}"
@@ -90,27 +92,17 @@ services:
   cfbypass:
     image: lisa666520/chatgpt-mirror-django:cfbypass
     command:
-      - uvicorn
-      - app:app
-      - --host
-      - "0.0.0.0"
-      - --port
-      - "8000"
+      - ./cfbypass-helper
+      - -addr
+      - "0.0.0.0:8000"
     ports:
       - "127.0.0.1:18001:8000"
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
       CF_BYPASS_USER_AGENT: "${CF_BYPASS_USER_AGENT:-Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36}"
       CF_BYPASS_ACCEPT_LANGUAGE: "${CF_BYPASS_ACCEPT_LANGUAGE:-zh-CN,zh}"
-      CF_BYPASS_HEADLESS: "${CF_BYPASS_HEADLESS:-true}"
+      CF_BYPASS_BROWSER_IDLE_SECONDS: "${CF_BYPASS_BROWSER_IDLE_SECONDS:-30}"
       CF_BYPASS_MAX_WAIT_SECONDS: "${CF_BYPASS_MAX_WAIT_SECONDS:-20}"
-      CF_BYPASS_PAGE_LOAD_TIMEOUT_SECONDS: "${CF_BYPASS_PAGE_LOAD_TIMEOUT_SECONDS:-15}"
-      CF_BYPASS_FIRST_COOKIE_WAIT_SECONDS: "${CF_BYPASS_FIRST_COOKIE_WAIT_SECONDS:-6}"
-      CF_BYPASS_POLL_INTERVAL_SECONDS: "${CF_BYPASS_POLL_INTERVAL_SECONDS:-0.5}"
-      CF_BYPASS_COOKIE_STABLE_POLLS: "${CF_BYPASS_COOKIE_STABLE_POLLS:-2}"
-      CF_BYPASS_NAVIGATION_RETRIES: "${CF_BYPASS_NAVIGATION_RETRIES:-1}"
-      CF_BYPASS_ELEMENT_LOOKUP_TIMEOUT_SECONDS: "${CF_BYPASS_ELEMENT_LOOKUP_TIMEOUT_SECONDS:-0.2}"
-      CF_BYPASS_DISPLAY_SIZE: "${CF_BYPASS_DISPLAY_SIZE:-1920x1080}"
       CF_BYPASS_SECRET: "${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set}"
       CF_BYPASS_ALLOWED_HOSTS: "${CF_BYPASS_ALLOWED_HOSTS:-chatgpt.com,.chatgpt.com}"
     shm_size: "1gb"
