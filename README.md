@@ -1,6 +1,6 @@
 # ChatGPT Mirror
 
-### 仅适合个人学习和个人研究用图，allinone镜像目前不更新
+### 仅适合个人学习和个人研究用图，allinone镜像目前不更新，其他不受影响
 
 
 项目重点关注多用户使用、共享账号隔离、移动端兼容、弱网体验和日常运维，**仅适合个人学习、内部研究及其他获得合法授权的非商业场景。**
@@ -237,16 +237,20 @@ client_header_buffer_size 64k;
 - 减少 GPT6 使用 ChatGPT Intelligent UI 的降智可能
 - 优化组件适配性
 - cfbypass-2.0提供了适用于 Cloudflare turnstile 的更快的处理方案（需要更新 [docker-compose.yml](./docker-compose.yml) ）
+- 修复refresh_account 无限刷新问题（由github/Cznorth提出）
+- 修复少许 team 账号所导致的问题（由github/I0amLK提出）
+- 修复多标签页多开互踢问题（由github/asdfank提出）
+
 
 ### 2026-09
 
 - 增加大量安全性功能
+- 修复可以通过"//"绕过访问可以看到原始session内容（由github/xiaolongmr提出）
 - 复测
 - 修复错误
 - 修复错误 x 2
 - MCP & skills 隔离
 - 添加：**模型隔离**，**模型频率限制**
-- 添加防止恶意用户通过`//`路径绕过获取 Session Token & Access Token
 - 支持通过邮件`SMTP`为定时检测到的**已经失效的账号进行邮件推送服务**
 
 ### 2026-08
