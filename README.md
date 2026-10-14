@@ -197,6 +197,51 @@ large_client_header_buffers 8 64k;
 client_header_buffer_size 64k;
 ```
 
+### 进入 ChatGPT 后页面无限刷新（refresh_account 循环）
+
+##### 现象
+
+进入 ChatGPT 后页面每隔几秒自动刷新一次，发送按钮一直转圈，无法发送消息。浏览器里可以看到反复跳转到
+`/?refresh_account=true&startup_account_refresh=true`，控制台反复出现 `[gw] cleaned URL`。
+
+##### 原因
+
+ChatGPT 前端在启动时会比较 SessionToken 里的账号信息（`session.account.planType` / `isDelinquent` / `gracePeriodId`）
+和 `/backend-api/accounts/check` 的返回值。两者不一致时（例如 SessionToken 里是 `go`，`accounts/check` 返回 `plus`），
+会执行 `window.location.replace("/?refresh_account=true&startup_account_refresh=true")` 刷新一次。
+带着这两个参数加载的页面不会再次触发刷新（前端自带的防循环保护）。
+
+但目前 Gateway：
+
+1. 对 `/?refresh_account=true...` 返回 302 跳回 `/`，参数丢失；
+2. 注入的脚本在 ChatGPT 读取参数之前执行 `history.replaceState` 把参数清掉（`[gw] cleaned URL`）；
+3. 注入的 `suppressRefreshAccountNavigation` 拦截不到 `window.location.replace`（浏览器不允许覆盖该方法）。
+
+结果前端永远读不到参数，防循环保护失效，页面无限刷新。
+
+##### 临时解决方案（NGINX）
+
+在反代的 `location /` 中加入以下内容：把带参数的请求按 `/` 转给 Gateway，但浏览器地址栏保留参数；
+并让注入脚本不再清除参数。页面只会额外刷新一次，之后正常使用。
+
+```nginx
+location / {
+    if ($arg_startup_account_refresh = "true") {
+        rewrite ^/$ /? break;
+    }
+    proxy_pass http://127.0.0.1:40002;
+
+    # sub_filter 需要未压缩的响应
+    proxy_set_header Accept-Encoding "";
+    sub_filter_once off;
+    sub_filter "window.history.replaceState(null, '', clean || '/');" "void 0;";
+
+    # ...其余 proxy_set_header / websocket 配置保持不变
+}
+```
+
+`sub_filter` 依赖注入脚本的原文，Gateway 更新后如果脚本内容变化需要同步调整。
+
 
 ## 管理后台
 
