@@ -1,14 +1,14 @@
 <template>
-  <div>
-    <t-card title="脚本" subtitle="管理注入到页面中的自定义代码" :bordered="false">
+  <div class="workspace-page settings-page scripts-page">
+    <t-card :title="t('脚本')" :subtitle="t('管理注入到页面中的自定义代码')" :bordered="false">
       <template #actions>
         <t-space>
           <t-button variant="outline" :loading="loading" @click="fetchConfig">
-            刷新
+            {{ t('刷新') }}
           </t-button>
           <t-button theme="primary" @click="addScript">
             <template #icon><t-icon name="add" /></template>
-            新增脚本
+            {{ t('新增脚本') }}
           </t-button>
         </t-space>
       </template>
@@ -22,41 +22,41 @@
                 <t-switch v-model="script.enabled" />
               </t-space>
               <t-button size="small" theme="danger" variant="outline" @click="removeScript(script.localKey)">
-                删除
+                {{ t('删除') }}
               </t-button>
             </div>
 
-            <t-form-item label="名称">
-              <t-input v-model="script.name" clearable placeholder="例如：隐藏顶部提示、注入统计脚本" />
+            <t-form-item :label="t('名称')">
+              <t-input v-model="script.name" clearable :placeholder="t('例如：隐藏顶部提示、注入统计脚本')" />
             </t-form-item>
 
             <div class="script-meta">
-              <t-form-item label="语言">
+              <t-form-item :label="t('语言')">
                 <t-select v-model="script.language">
-                  <t-option v-for="item in languageOptions" :key="item.value" :value="item.value" :label="item.label" />
+                  <t-option v-for="item in languageOptions" :key="item.value" :value="item.value" :label="t(item.label)" />
                 </t-select>
               </t-form-item>
-              <t-form-item label="位置">
+              <t-form-item :label="t('位置')">
                 <t-select v-model="script.position">
-                  <t-option v-for="item in positionOptions" :key="item.value" :value="item.value" :label="item.label" />
+                  <t-option v-for="item in positionOptions" :key="item.value" :value="item.value" :label="t(item.label)" />
                 </t-select>
               </t-form-item>
             </div>
 
-            <t-form-item label="内容">
+            <t-form-item :label="t('内容')">
               <t-textarea
                 v-model="script.content"
                 :autosize="{ minRows: 8, maxRows: 18 }"
-                placeholder="CSS 会自动包裹 style；JavaScript 会自动包裹 script。"
+                :placeholder="t('CSS 会自动包裹 style；JavaScript 会自动包裹 script。')"
               />
             </t-form-item>
           </div>
         </div>
 
         <div class="trusted-cdn-panel">
-          <div class="trusted-cdn-title">可信 CDN 源</div>
+          <div class="trusted-cdn-title">{{ t('可信 CDN 源') }}</div>
           <div class="trusted-cdn-desc">
-            每行一个来源。保存后会自动加入 Gateway 页面可信域名列表，仅接受以下格式：
+            {{ t('每行一个来源。保存后会自动加入 Gateway 页面可信域名列表，仅接受以下格式：') }}
             <code>https://example.com/*</code>
           </div>
           <t-textarea
@@ -68,10 +68,10 @@
 
         <t-form-item>
           <t-button theme="primary" :loading="saving" @click="handleSave">
-            保存
+            {{ t('保存') }}
           </t-button>
           <t-button variant="outline" @click="addScript">
-            新增脚本
+            {{ t('新增脚本') }}
           </t-button>
         </t-form-item>
       </t-form>
@@ -83,6 +83,9 @@
 import { reactive, ref, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t } = useWorkspaceCopy()
 
 type ScriptForm = {
   localKey: number
@@ -174,18 +177,18 @@ const validateScripts = () => {
   const ids = new Set<number>()
   for (const script of serializeScripts()) {
     if (ids.has(script.id)) {
-      MessagePlugin.warning(`脚本 ${script.id} 重复`)
+      MessagePlugin.warning(t('脚本 {0} 重复', [script.id]))
       return false
     }
     ids.add(script.id)
     if (script.enabled && !script.content.trim()) {
-      MessagePlugin.warning(`脚本 ${script.id} 已启用，请填写内容`)
+      MessagePlugin.warning(t('脚本 {0} 已启用，请填写内容', [script.id]))
       return false
     }
   }
   for (const source of serializeTrustedCdnSources()) {
     if (!/^https:\/\/[^/\s]+\/\*$/.test(source)) {
-      MessagePlugin.warning(`可信 CDN 格式错误：${source}`)
+      MessagePlugin.warning(t('可信 CDN 格式错误：{0}', [source]))
       return false
     }
   }
@@ -207,7 +210,7 @@ const handleSave = async () => {
   if (data) {
     formData.scripts.splice(0, formData.scripts.length, ...(data.scripts || []).map(createScript))
     trustedCdnInput.value = (data.trusted_cdn_sources || []).join('\n')
-    MessagePlugin.success('保存成功')
+    MessagePlugin.success(t('保存成功'))
   }
 }
 </script>
@@ -227,7 +230,7 @@ const handleSave = async () => {
   padding: 18px;
   border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: #fafaf8;
+  background: var(--app-field);
 }
 
 .script-title {

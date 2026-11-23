@@ -1,54 +1,66 @@
 # ChatGPT Mirror
 
-### 仅适合个人学习和个人研究用图，allinone镜像目前不更新，其他不受影响
+### 适合个人学习和研究使用，allinone 镜像暂不更新，其他不受影响
 
+# **项目恢复更新，本次重点优化性能，并对登录界面和管理后台进行大幅改版。**
 
-# 本项目暂停更新，正在开发一个兼容性更好，效率更高，兼容的API更多的项目，敬请期待！
+本次更新继续完善 ChatGPT 新版页面和接口的兼容性，同时优化网关、CF 辅助和资源加载流程。登录、账号选择和管理后台统一了配色与交互，支持中英文切换和深色、浅色模式。
 
-# **最新版本的仅ChatGPT网关正在进行重构，进度已接近 90% ，预计将在 12 月之前发布 Docker 镜像，目前不打算完整开源（以后可能会） ， 我会尽快完成**
+目前使用 Docker Compose 部署，三个服务均从云端拉取镜像，支持 **AMD64 / ARM64**，不需要在服务器上编译。网关及 CF 辅助暂未完整开源，部署以云端镜像为准。
 
+## 本次更新
 
-项目重点关注多用户使用、共享账号隔离、移动端兼容、弱网体验和日常运维，**仅适合个人学习、内部研究及其他获得合法授权的非商业场景。**
+### 性能提升
 
----
+- **减少浏览器开销**：cfbypass 优先使用轻量请求内核，需要执行 JavaScript 时再启动浏览器。浏览器进程可复用，空闲后自动释放。
+- **减少首次请求等待**：CF Cookie 预热在后台执行，普通 HTTP 和 WebSocket 请求不主动启动验证浏览器。
+- **减少重复请求**：网关复用连接与授权缓存，DIL 资源按上游缓存策略加载，降低重复获取资源的开销。
+- **完善流式响应**：适配新版回答组件和云端 DIL，修复部分账号出现“无法加载回复”、刷新后历史回答不显示的问题。
 
-## 目录
+### 界面大幅优化
 
-- [技术栈](#技术栈)
-- [功能概览](#功能概览)
-- [效果展示](#效果展示)
-- [cfbypass2.0](#cfbypass20)
-- [降智情况各功能兼容情况](#降智情况各功能兼容情况)
-- [项目结构](#项目结构)
-- [快速开始](#快速开始)
-- [管理后台](#管理后台)
-- [安全与使用边界](#安全与使用边界)
-- [使用许可](#使用许可)
-- [更新日志](#更新日志)
+- 重新设计登录页、注册入口和账号选择页面，统一字体、间距与配色。
+- 重构管理后台的导航、表格和表单，让账号、用户、号池和日志更容易查找。
+- 添加中英文切换与深色、浅色模式，登录页和后台使用同一套视觉风格。
+- 优化账号套餐标识、状态提示和操作反馈，登录冷却提供剩余时间倒计时。
 
-## 技术栈
+### 兼容与功能修复
 
-- 管理后台：Vue 3、TypeScript、Vite、Pinia、TDesign Vue Next
-- 管理服务：Python、Django 5.1、Django REST Framework
-- 数据存储：SQLite
-- 部署方式：Docker Compose
+- 修复 **Pro 被识别成 Free** 的问题，覆盖标准 Pro、Pro Lite、Pro Max 及相关订阅类型；凭据检测失败时保留上次有效套餐。
+- “访问与安全”新增 **禁止访问 Dot** 独立开关，默认开启，同时控制页面、接口及属于 Dot 的消息房间。
+- 完善 **Library 文件隔离**，按用户核对文件归属，覆盖列表、搜索、预览、下载和删除；入口是否隐藏单独配置。
+- 适配新版退出登录流程，补充退出、撤销和会话清理处理。
+- 页面初始化隔离失败时，提供 **5 秒倒计时**，清理镜像站 Cookie 后自动刷新。
+- 完善登录失败记录和 **120 秒冷却**，已登录的有效会话继续可用；同一 NAT 下的其他用户不会仅因 IP 相同被冷却。
+- 调整日志输出，保留异常和访问记录，隐藏参数值及 Cookie；改善反向代理后的来源 IP 识别。
 
 ## 功能概览
 
-- **用户与权限**：管理用户状态、访问权限、可用模型和使用限制。
-- **账号管理**：集中维护 ChatGPT 账号，支持 Cookie 和 Refresh Token 两种录入方式。
-- **号池分配**：通过账号池组织可用账号，并按用户分配访问范围。
-- **共享账号隔离**：不同镜像用户共用上游账号时，尽可能隔离普通对话、归档、搜索、标题和删除操作 & MCP & skills。支持：**模型隔离**，**模型频率限制**
-- **使用记录**：查看访问记录、使用次数和运行状态，便于日常管理与排查。
-- **站点配置**：管理代理、连通性测试、自定义脚本和禁止访问路径。
-- **多端兼容**：持续适配桌面浏览器、iPhone Safari 和 iPhone Chrome 等访问环境。
-- **部署运维**：提供本地及 VPS 的 Docker Compose 编排，便于启动、更新和查看日志。支持通过邮件`SMTP`为定时检测到的已经失效的账号进行邮件推送服务
+- **账号与号池**：管理上游账号、凭据状态和代理节点，按号池为用户分配账号。
+- **文件与会话隔离**：按镜像用户管理对话、项目和 Library 文件，检查预览、下载、删除与搜索归属。
+- **界面与交互**：统一登录和后台配色，支持中英文、深色与浅色模式。
+- **访问与安全**：集中管理上游设置和 Dot 访问，记录登录失败并提供冷却倒计时。
+- **日常运维**：查看用量和访问日志，执行账号检测，并通过 SMTP 接收账号失效通知。
 
 ## 效果展示
 
 ### 登录界面
 
+https://github.com/user-attachments/assets/241373b4-d7c2-47e9-b740-58020bcdcf09
+
+新版重新整理了登录流程、账号卡片和状态提示。下面的截图保留作旧版对照。
+
 ![登录界面](./imageandvideo/登录界面.png)
+
+### 管理后台
+
+https://github.com/user-attachments/assets/19174496-7c4f-4475-a70f-a6345328fde0
+
+账号、号池、日志和访问配置使用统一的导航与布局。
+
+### 语言与深色、浅色模式
+
+https://github.com/user-attachments/assets/9464e301-3715-465d-8673-76ac1a6e1a60
 
 ### ChatGPT 界面
 
@@ -58,35 +70,32 @@
 
 ![禁止访问路径示例](./imageandvideo/禁止访问路径示例.png)
 
-### 操作演示
+当前版本在“访问与安全”中使用总开关管理上游设置，并提供独立的 Dot 开关；上图为旧版路径管理界面。
 
+### 操作演示
 
 https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
+[▶ 查看原版演示视频](./imageandvideo/演示1.mp4)
 
-[▶ 查看演示视频](./imageandvideo/演示1.mp4)
-
-> GitHub 页面无法直接播放视频时，可点击链接查看或下载原始文件。
+> 视频可在 GitHub 网页端直接播放。
 
 ## cfbypass2.0
 
-**cfbypass 2.0** 采用 **双内核协同机制**。日常请求优先由 **极致轻量请求内核** 处理；遇到明确的脚本验证挑战，或满足自动后备条件时，再启用浏览器执行内核。整个切换过程 **自动完成**，无需手动选择模式。
+**cfbypass 2.0** 采用 **双内核协同机制**。日常请求优先由 **轻量请求内核** 处理；遇到需要执行 JavaScript 的验证，或满足自动后备条件时，再启用浏览器执行内核。整个切换过程 **自动完成**，无需手动选择模式。
 
-这种 **按需运行** 的方式减少了浏览器长时间驻留带来的 **资源开销**。浏览器可以在任务之间复用，空闲后自动关闭，再次需要时重新启动，兼顾响应速度与服务器资源使用。
+这种 **按需运行** 的方式减少了浏览器长时间驻留带来的资源开销。浏览器可以在任务之间复用，空闲后自动关闭，再次需要时重新启动。
 
-在一次实际部署记录中，轻量内核用时 **约 214 毫秒(0.214 秒)** 完成了 Cookie 获取，服务 **首次预热便成功**。这是单次运行结果，具体耗时仍会受到网络、代理和验证类型的影响。
-
+在之前的一次实际部署记录中，轻量内核用时 **约 214 毫秒（0.214 秒）** 完成 Cookie 获取，服务首次预热便成功。这是单次运行记录，具体耗时与网络、代理和验证类型有关。
 
 ## 降智情况&各功能兼容情况
 
 <details>
 <summary><span style="color: #d4a017; font-weight: bold;">点击此处以查看降智情况及部分检测</span></summary>
 
-
-### 最新版本降智情况（原生日本 IP）
+### 最新版本目前使用第二种或者第三种线路完全不降智，以下为老版本降智情况（原生日本 IP）
 
 ![降智情况 2026-08-26](./imageandvideo/Snapzy_2026-08-26_12-43-58_266.png)
-
 
 #### 降智及降智复测
 
@@ -102,8 +111,7 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
 ![添加项目隔离后降智复测](./imageandvideo/Snapzy_2026-08-27复测.png)
 
-> 本降智测试已在最新版本中的“代理“界面开启**实验性**的“curl-impersonate“，实验模式造成的后果需自行承担
-
+> 这组历史测试在“代理”界面开启了 curl-impersonate，截图日期保留，供对照查看。
 
 ![实验模式](./imageandvideo/方案.png)
 
@@ -113,17 +121,20 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 
 </details>
 
-
 ## 项目结构
 
 ```text
 chatgpt-mirror/
-├── backend/                 # 管理服务
-├── frontend/                # 管理后台
+├── backend/                 # 管理服务：用户、上游账号、号池与健康检测
+├── frontend/                # 管理界面：登录、主题与后台页面
 ├── imageandvideo/           # README 图片与演示视频
-├── docker-compose.yml       # VPS 部署编排
-└── FAQ.md                   # 常见问题
+├── .env.example             # 环境变量模板
+├── docker-compose.yml       # 云端镜像部署编排
+├── FAQ.md                   # 常见问题
+└── README.md                # 项目说明
 ```
+
+启动后，`data/` 保存网关数据，`backend/db/` 保存管理服务数据，`backend/logs/` 保存日志。更新时保留这几个目录以及原来的 `.env`。
 
 > 非开源组件未在项目结构中展开。
 
@@ -133,7 +144,8 @@ chatgpt-mirror/
 
 - Docker Engine
 - Docker Compose v2
-- 可用的 HTTPS 域名（生产环境推荐）
+- AMD64 或 ARM64 主机
+- 可用的 HTTPS 域名（公网部署使用）
 
 ### 配置与启动
 
@@ -143,8 +155,7 @@ chatgpt-mirror/
 cp .env.example .env
 ```
 
-
-然后编辑 `.env`，至少替换以下示例值：
+然后编辑 `.env`，至少替换以下值。每个密钥分别生成，已有部署继续使用原来的值。
 
 ```env
 ADMIN_USERNAME=admin
@@ -152,49 +163,83 @@ ADMIN_PASSWORD=请替换为管理员强密码
 
 GATEWAY_ADMIN_SECRET=请替换为独立随机密钥
 DJANGO_SECRET_KEY=请替换为独立随机密钥
-CREDENTIAL_ENCRYPTION_KEY=请替换为至少32位的独立随机密钥
-
-DJANGO_ALLOW_ALL_ORIGINS=disable
-DJANGO_ALLOWED_HOSTS=example.com,django,localhost,127.0.0.1
-DJANGO_CSRF_TRUSTED_ORIGINS=https://example.com
-LOCAL_NETWORK_ACCESS=disable
-
-CLOUDFLARE_TURNSTILE=disable
-CLOUDFLARE_TURNSTILE_SITE_KEY=
-CLOUDFLARE_TURNSTILE_SECRET_KEY=
+CREDENTIAL_ENCRYPTION_KEY=请替换为至少32个字符的独立随机密钥
 ```
 
-需要直接通过 `http://localhost:端口` 或 `http://局域网IP:端口` 访问时，可设置：
+需要生成随机值时，可以多次执行：
+
+```bash
+openssl rand -hex 32
+```
+
+当前三种镜像都在同一个仓库中，Docker 会自动选择 CPU 架构：
+
+| 服务 | 镜像 |
+| --- | --- |
+| 网关与管理前端 | `lisa666520/chatgpt-mirror:latest` |
+| 管理服务 | `lisa666520/chatgpt-mirror:backend` |
+| CF 辅助 | `lisa666520/chatgpt-mirror:cfbypass` |
+
+检查配置并启动：
+
+```bash
+docker compose config --quiet
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+默认访问 `http://服务器IP:40002/`，后台入口为 `http://服务器IP:40002/admin/`。公网部署时使用自己的 HTTPS 域名。
+
+### 局域网与 HTTPS
+
+示例配置默认允许局域网 HTTP 访问：
 
 ```env
+BIND_ADDRESS=0.0.0.0
 LOCAL_NETWORK_ACCESS=enable
 ```
 
-该开关会让 Gateway 允许任意 Django Host/Origin/Referer，并强制关闭
-`DJANGO_SESSION_COOKIE_SECURE`、`DJANGO_CSRF_COOKIE_SECURE` 和 `COOKIE_SECURE`，因此不需要再分别设置这三个变量。
-CSRF token 和登录鉴权仍然保留。此模式允许 Cookie 经明文 HTTP 传输，理论只应在可信本地或局域网使用；公网 HTTPS 部署须保持 `disable`。
-除 `enable`、`disable` 外的值会导致服务拒绝启动。
+`enable` 会放开 Host/Origin/Referer 校验，并自动关闭 Secure Cookie；CSRF Token 与登录鉴权仍保留。需要通过 `http://192.168.x.x:40002` 访问时，直接使用这一配置。
 
+使用域名和 HTTPS 时改为：
 
-请勿将真实密码、Cookie、Token 或 `.env` 文件提交到版本库。
+```env
+LOCAL_NETWORK_ACCESS=disable
+DJANGO_ALLOW_ALL_ORIGINS=disable
+DJANGO_ALLOWED_HOSTS=example.com,django,localhost,127.0.0.1
+DJANGO_CSRF_TRUSTED_ORIGINS=https://example.com
+DJANGO_SESSION_COOKIE_SECURE=true
+DJANGO_CSRF_COOKIE_SECURE=true
+COOKIE_SECURE=true
+```
 
+域名替换成自己的。反向代理连接网关的 `40002` 端口，Django 和 CF 辅助通过容器网络通信，不需要另外映射端口。
 
+### 更新
 
-常用命令
+```bash
+docker compose pull
+docker compose up -d
+```
+
+保留原来的 `.env`、`data/` 和 `backend/db/`。**不要在更新时重新生成 `CREDENTIAL_ENCRYPTION_KEY`**，已有凭据需要使用原密钥解密。更新后可在“上游账号”点击“一键检测”，重新检查套餐和凭据状态。
+
+### 常用命令
 
 ```bash
 docker compose ps
-docker compose logs -f
+docker compose logs -f --tail 100
 docker compose down
 ```
 
-### 使用 NGINX/Cloudflare 时记得开启 websocket 支持。并且 NGINX 要求填入以下内容，实现最大化的减少错误
-### 错误出现
-##### (400 Request Header Or Cookie Too Large、414 Request-URI Too Large)&(upstream sent too big header while reading response header from upstream)
+### 使用 NGINX/Cloudflare
 
-### 解决方案：
+开启 WebSocket 支持，并为流式响应关闭代理缓冲。使用 NGINX Proxy Manager 时，先打开界面中的 WebSocket 支持，再在 Advanced 中按需添加：
 
-``` 
+```nginx
+proxy_buffering off;
+proxy_read_timeout 300s;
 proxy_buffer_size 128k;
 proxy_buffers 8 128k;
 proxy_busy_buffers_size 256k;
@@ -202,6 +247,7 @@ large_client_header_buffers 8 64k;
 client_header_buffer_size 64k;
 ```
 
+头部缓冲配置用于处理 `400 Request Header Or Cookie Too Large`、`414 Request-URI Too Large` 和 `upstream sent too big header` 等问题。来源 IP 的配置见 [FAQ](./FAQ.md)。
 
 ## 管理后台
 
@@ -209,30 +255,41 @@ client_header_buffer_size 64k;
 
 | 功能 | 说明 |
 | --- | --- |
-| 用户管理 | 维护用户状态、访问权限、使用限制 |
-| ChatGPT 账号 | 添加、更新和检查账号状态，并在需要时手动刷新凭据 |
-| 号池管理 | 对账号进行分组，并配置账号池与镜像用户的关联关系 |
-| 访问日志 | 查看用户访问记录和运行情况，辅助定位异常问题 |
+| 用户管理 | 维护用户状态、模型配额、文件隔离和访问期限 |
+| ChatGPT 账号 | 添加、更新和检测账号，查看套餐、凭据状态与剩余时间 |
+| 号池管理 | 对账号分组，并配置账号池与镜像用户的关联关系 |
+| 访问日志 | 查看页面访问、登录失败记录和来源 IP，参数值隐藏 |
 | 代理管理 | 维护代理配置并执行连通性测试 |
 | 脚本管理 | 维护站点所需的自定义脚本配置 |
-| 访问限制 | 配置不允许镜像用户访问的页面或功能范围 |
+| 访问与安全 | 统一控制上游设置，独立控制 Dot 访问 |
+| 健康检测 | 定时复检上游账号，通过 SMTP 发送异常通知 |
 
+其他部署和使用问题见 [FAQ](./FAQ.md)。
 
-## 安全与使用边界
+## 使用说明
 
-- 仅在你拥有授权的账号、网络和部署环境中使用本项目。
-- 使用者应自行遵守 OpenAI 服务条款及所在地法律法规。
-- 不要共享账号凭据、访问令牌、Cookie 或其他敏感信息。
-- 生产环境应使用独立强密钥和 HTTPS，并限制管理端的网络暴露范围。
-- 共享账号隔离只作用于镜像站可控制的范围，不能替代上游账号本身的安全隔离。
-- 上游页面和接口可能变化；本地测试通过不代表部署后的浏览器流程一定可用。
-- 管理员进行任何用户操作（包括但不限于权限，密码）都可能导致正在使用的用户掉线！
+仅在拥有授权的账号和环境中使用，并遵守上游服务条款及所在地法律法规。
 
 ## 使用许可
 
 本项目仅允许用于个人学习、研究及其他非商业用途。禁止将本项目或其修改版本用于收费服务、商业运营、商业部署、转售、托管收费或其他直接或间接营利活动。如需商业使用，须事先取得作者的书面许可。
 
 ## 更新日志
+
+### 2026-11
+
+- 项目恢复更新，本次重点优化性能和界面
+- 大幅改版登录、账号选择和管理后台，添加中英文与深色、浅色模式
+- 优化 cfbypass 按需启动、进程复用和后台预热流程
+- 改用云端 DIL，修复部分回答组件和历史内容加载问题
+- 完善 Library 文件隔离与文件预览、下载、删除适配
+- 修复标准 Pro、Pro Lite、Pro Max 及相关订阅类型被识别成 Free 的问题
+- 访问与安全新增“禁止访问 Dot”独立总开关，默认开启
+- 适配新版退出登录、会话撤销与 Cookie 清理流程
+- 添加页面初始化失败后的 5 秒倒计时恢复
+- 完善登录失败记录、浏览器指纹校验和 120 秒登录冷却
+- 优化来源 IP 识别与日志脱敏，减少不必要的日志
+- 更新 AMD64 / ARM64 云端镜像，统一使用一个仓库的三个服务标签
 
 ### 2026-10
 
@@ -277,7 +334,7 @@ client_header_buffer_size 64k;
 
 ### 2026-07
 
-- 完成一轮安全加固，重点收紧凭据输出、管理权限、跳转边界、敏感日志和生产环境安全配置。
+- 完成一轮安全加固，重点收紧凭据输出、管理权限、跳转校验、敏感日志和生产环境安全配置。
 - 增加共享上游账号时的镜像用户隔离，覆盖普通对话、归档、搜索、标题和删除等常用操作，并限制共享记忆功能带来的交叉影响。
 - 优化页面静态资源和图表内容的加载表现，减少资源缺失、重复加载和卡片显示异常。
 - 修复容器构建过程中偶发的依赖缓存与产物缺失问题，提高重复构建的稳定性。

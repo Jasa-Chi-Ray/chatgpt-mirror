@@ -1,28 +1,30 @@
 <template>
-  <div>
-    <t-card title="日志" subtitle="查看登录与账号使用记录；管理员登录记录会被永久保留" :bordered="false">
+  <div class="workspace-page data-page logs-page">
+    <t-card :title="t('日志')" :subtitle="t('查看登录与账号使用记录；管理员登录记录会被永久保留')" :bordered="false">
       <template #actions>
         <t-popconfirm
-          content="清除全部可删除日志？管理员登录记录不会被清除。"
+          :content="t('清除全部可删除日志？管理员登录记录不会被清除。')"
           @confirm="clearLogs"
         >
           <t-button theme="danger" variant="outline" :loading="clearing">
-            清除可删除日志
+            {{ t('清除可删除日志') }}
           </t-button>
         </t-popconfirm>
       </template>
       <div class="log-toolbar">
-        <t-input v-model="query" clearable placeholder="搜索用户或上游账号" @enter="applyFilters" />
-        <t-select v-model="logType" clearable placeholder="全部类型" @change="applyFilters">
-          <t-option value="login" label="登录" />
-          <t-option value="choose-gpt" label="选择账号" />
-          <t-option value="proxy" label="代理请求" />
+        <t-input v-model="query" clearable :placeholder="t('搜索用户或上游账号')" @enter="applyFilters" />
+        <t-select v-model="logType" clearable :placeholder="t('全部类型')" @change="applyFilters">
+          <t-option value="login" :label="t('登录')" />
+          <t-option value="login-failed" :label="t('密码连续错误')" />
+          <t-option value="login-cooldown" :label="t('登录冷却')" />
+          <t-option value="choose-gpt" :label="t('选择账号')" />
+          <t-option value="proxy" :label="t('代理请求')" />
         </t-select>
-        <t-button variant="outline" @click="applyFilters">查询</t-button>
+        <t-button variant="outline" @click="applyFilters">{{ t('查询') }}</t-button>
       </div>
       <t-table
         :data="tableData"
-        :columns="columns"
+        :columns="labels(columns)"
         :loading="loading"
         :pagination="pagination"
         @page-change="onPageChange"
@@ -30,16 +32,16 @@
       >
         <template #username="{ row }">
           <span>{{ row.username }}</span>
-          <span v-if="isProtectedLog(row)" class="protected-label">保留</span>
+          <span v-if="isProtectedLog(row)" class="protected-label">{{ t('保留') }}</span>
         </template>
         <template #log_type="{ row }">
           <t-tag :theme="getLogTypeTheme(row.log_type)">
-            {{ getLogTypeText(row.log_type) }}
+            {{ t(getLogTypeText(row.log_type)) }}
           </t-tag>
         </template>
         <template #browser_ip="{ row }">
-          <span :title="row.browser_ip ? '浏览器上报的公网出口 IP，仅供参考' : '未获取、检测失败或历史记录'">
-            {{ row.browser_ip || '未获取' }}
+          <span :title="row.browser_ip ? t('浏览器上报的公网出口 IP，仅供参考') : t('未获取、检测失败或历史记录')">
+            {{ row.browser_ip || t('未获取') }}
           </span>
         </template>
         <template #created_at="{ row }">
@@ -55,6 +57,9 @@ import { ref, reactive, onMounted } from 'vue'
 import dayjs from 'dayjs'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t, labels } = useWorkspaceCopy()
 
 const loading = ref(false)
 const clearing = ref(false)
@@ -75,6 +80,8 @@ const columns = [
   { colKey: 'log_type', title: '操作类型', cell: 'log_type', width: 120 },
   { colKey: 'ip', title: '服务端识别 IP', width: 180, ellipsis: true },
   { colKey: 'browser_ip', title: '浏览器检测 IP（参考）', cell: 'browser_ip', width: 220, ellipsis: true },
+  { colKey: 'failure_count', title: '连续失败', width: 100 },
+  { colKey: 'cooldown_seconds', title: '冷却秒数', width: 100 },
   { colKey: 'created_at', title: '时间', cell: 'created_at', width: 180 },
   { colKey: 'user_agent', title: 'User Agent', ellipsis: true }
 ]
@@ -124,7 +131,7 @@ const clearLogs = async () => {
     pagination.current = 1
     await fetchData()
     MessagePlugin.success(
-      `已清除 ${data.deleted_count || 0} 条日志，保留 ${data.protected_count || 0} 条管理员登录记录`
+      t('已清除 {0} 条日志，保留 {1} 条管理员登录记录', [data.deleted_count || 0, data.protected_count || 0])
     )
   }
 }
@@ -132,6 +139,8 @@ const clearLogs = async () => {
 const getLogTypeTheme = (type: string) => {
   const themes: Record<string, string> = {
     'login': 'success',
+    'login-failed': 'warning',
+    'login-cooldown': 'danger',
     'choose-gpt': 'primary',
     'logout': 'warning',
     'proxy': 'default'
@@ -142,6 +151,8 @@ const getLogTypeTheme = (type: string) => {
 const getLogTypeText = (type: string) => {
   const texts: Record<string, string> = {
     'login': '登录',
+    'login-failed': '密码连续错误',
+    'login-cooldown': '登录冷却',
     'choose-gpt': '选择账号',
     'logout': '登出',
     'proxy': '代理请求'
@@ -159,10 +170,10 @@ const formatTime = (timestamp: number) => {
   display: inline-flex;
   margin-left: 8px;
   padding: 2px 6px;
-  color: #5f5f5a;
+  color: var(--app-text-muted);
   font-size: 11px;
   line-height: 16px;
-  background: #efefec;
+  background: var(--app-field);
   border-radius: 4px;
 }
 .log-toolbar {

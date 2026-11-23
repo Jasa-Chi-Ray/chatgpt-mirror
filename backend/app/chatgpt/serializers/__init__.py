@@ -40,11 +40,13 @@ class ShowChatgptTokenSerializer(serializers.ModelSerializer):
     has_refresh_token = serializers.SerializerMethodField()
 
     def get_access_token_exp(self, obj):
+        if not obj.access_token_valid:
+            return None
         try:
-            access_token_exp = jwt.decode(obj.access_token, options={"verify_signature": False})["exp"]
+            expiry = jwt.decode(obj.access_token, options={"verify_signature": False}).get("exp")
+            return expiry if type(expiry) is int else None
         except Exception:
-            access_token_exp = 0
-        return access_token_exp
+            return None
 
     def get_supported_login_modes(self, obj):
         modes = []

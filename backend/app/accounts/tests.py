@@ -10,7 +10,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
-from app.accounts.models import Announcement, User, VisitLog, GatewayRevocation
+from app.accounts.models import Announcement, User, VisitLog, GatewayRevocation, LoginSession
 from app.accounts.views import (
     ChangePasswordView,
     ConversationTitlePrivacyView,
@@ -107,6 +107,58 @@ class UnifiedBackupValidationTests(TestCase):
 class SecurityRegressionTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
+
+    def test_admin_can_enable_multi_login_and_omitted_flag_keeps_policy(self):
+        from app.accounts.serializers import ShowUserAccountModelSerializer
+        admin = User.objects.create_superuser(username="multi-admin", password="Strong-password-123!")
+        user = User.objects.create_user(username="multi-user", password="Strong-password-123!")
+        payload = {"username": user.username, "is_active": True, "isolated_session": True,
+                   "allow_multiple_sessions": True}
+        request = self.factory.post("/0x/user", payload, format="json")
+        force_authenticate(request, user=user)
+        self.assertEqual(UserAccountView.as_view()(request).status_code, 403)
+        request = self.factory.post("/0x/user", payload, format="json")
+        force_authenticate(request, user=admin)
+        self.assertEqual(UserAccountView.as_view()(request).status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.allow_multiple_sessions)
+        self.assertTrue(ShowUserAccountModelSerializer(user).data["allow_multiple_sessions"])
+        del payload["allow_multiple_sessions"]
+        request = self.factory.post("/0x/user", payload, format="json")
+        force_authenticate(request, user=admin)
+        self.assertEqual(UserAccountView.as_view()(request).status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.allow_multiple_sessions)
+
+    def test_admin_accounts_cannot_enable_multi_login_via_user_api(self):
+        admin = User.objects.create_superuser(username="multi-root", password="Strong-password-123!")
+        target = User.objects.create_user(username="multi-staff", is_staff=True, password="Strong-password-123!")
+        request = self.factory.post("/0x/user", {
+            "username": target.username, "is_active": True, "isolated_session": True,
+            "allow_multiple_sessions": True,
+        }, format="json")
+        force_authenticate(request, user=admin)
+        self.assertEqual(UserAccountView.as_view()(request).status_code, 400)
+        target.refresh_from_db()
+        self.assertFalse(target.allow_multiple_sessions)
+
+    def test_multi_login_policy_and_sessions_survive_backup_and_old_backup_is_supported(self):
+        from app.accounts.views.backup import _export_django_data, _restore_complete_django
+        user = User.objects.create_user(username="multi-backup", allow_multiple_sessions=True)
+        token = LoginSession.objects.create(user=user)
+        created = token.created
+        backup = _export_django_data()
+        _restore_complete_django(backup)
+        restored = LoginSession.objects.get(key=token.key)
+        self.assertTrue(restored.user.allow_multiple_sessions)
+        self.assertEqual(restored.created, created)
+        self.assertEqual(restored.key_digest, token.key_digest)
+        backup.pop("login_sessions")
+        for item in backup["users"]:
+            item.pop("allow_multiple_sessions", None)
+        _restore_complete_django(backup)
+        self.assertFalse(LoginSession.objects.exists())
+        self.assertFalse(User.objects.get(username=user.username).allow_multiple_sessions)
 
     def test_force_chat_mode_is_enabled_for_new_users(self):
         user = User.objects.create_user(username="work-mode-user", password="Strong-password-123!")
@@ -425,6 +477,16 @@ class SecurityRegressionTests(TestCase):
         req_gateway.assert_called_once_with(
             "post", "/api/blocked-paths", json={"paths": ["pricing"]}
         )
+
+    @patch("app.accounts.views.cfg.req_gateway", return_value={"settings_locked": False, "dots_locked": True})
+    def test_access_control_forwards_independent_dot_control(self, req_gateway):
+        admin = User.objects.create_superuser(username="dot-admin", password="password-123")
+        request = self.factory.post("/0x/user/access-control", {"dots_locked": True}, format="json")
+        force_authenticate(request, user=admin)
+        response = AccessControlView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["dots_locked"])
+        req_gateway.assert_called_once_with("post", "/api/blocked-paths", json={"dots_locked": True})
 
     @patch("app.accounts.revocations.req_gateway", return_value={"revoked": True})
     def test_logout_revokes_drf_and_gateway_sessions(self, req_gateway):

@@ -14,6 +14,7 @@ if __name__ == "__main__":
     from app.accounts.models import User
     from app.settings import FREE_ACCOUNT_USERNAME, ADMIN_USERNAME, ADMIN_PASSWORD
     from django.contrib.auth.password_validation import validate_password
+    from django.contrib.auth.hashers import check_password
 
     if not ADMIN_USERNAME:
         raise Exception("未设置 超级管理员账密")
@@ -24,7 +25,9 @@ if __name__ == "__main__":
     defaults = {"remark": "超级管理员", "isolated_session": False}
     user, created = User.objects.get_or_create(username=ADMIN_USERNAME, defaults=defaults)
     validate_password(ADMIN_PASSWORD, user)
-    user.set_password(ADMIN_PASSWORD)
+    # Preserve the existing hash and authorization version on ordinary restarts.
+    if created or not check_password(ADMIN_PASSWORD, user.password):
+        user.set_password(ADMIN_PASSWORD)
     user.is_staff = True
     user.is_active = True
     user.is_superuser = True

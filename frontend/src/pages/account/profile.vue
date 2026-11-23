@@ -1,35 +1,35 @@
 <template>
-  <div class="profile-grid">
-    <t-card title="用量配额" subtitle="配额为 0 表示不限制" :bordered="false">
+  <div class="workspace-page profile-page profile-grid">
+    <t-card :title="t('用量配额')" :subtitle="t('配额为 0 表示不限制')" :bordered="false">
       <t-loading :loading="loading">
         <div v-for="item in quotaItems" :key="item.label" class="quota-row">
           <div class="quota-head">
-            <span>{{ item.label }}</span>
-            <span>{{ item.used }} / {{ item.limit || '不限' }}</span>
+            <span>{{ t(item.label) }}</span>
+            <span>{{ item.used }} / {{ item.limit || t('不限') }}</span>
           </div>
           <t-progress :percentage="item.limit ? Math.min(100, item.used / item.limit * 100) : 0" :label="false" />
         </div>
       </t-loading>
     </t-card>
-    <t-card title="修改密码" subtitle="修改后会撤销其他设备上的旧登录 Token" :bordered="false">
+    <t-card :title="t('修改密码')" :subtitle="t('修改后会撤销其他设备上的旧登录 Token')" :bordered="false">
       <t-form :data="form" label-width="100px" @submit="changePassword">
-        <t-form-item label="当前密码" name="current_password">
+        <t-form-item :label="t('当前密码')" name="current_password">
           <t-input v-model="form.current_password" type="password" autocomplete="current-password" />
         </t-form-item>
-        <t-form-item label="新密码" name="new_password">
+        <t-form-item :label="t('新密码')" name="new_password">
           <t-input v-model="form.new_password" type="password" autocomplete="new-password" />
         </t-form-item>
         <t-form-item>
-          <t-button theme="primary" type="submit" :loading="saving">保存新密码</t-button>
+          <t-button theme="primary" type="submit" :loading="saving">{{ t('保存新密码') }}</t-button>
         </t-form-item>
       </t-form>
     </t-card>
-    <t-card title="对话标题隐私" subtitle="对话次数和模型消息统计始终可见，标题由你决定是否授权" :bordered="false">
+    <t-card :title="t('对话标题隐私')" :subtitle="t('对话次数和模型消息统计始终可见，标题由你决定是否授权')" :bordered="false">
       <t-loading :loading="privacyLoading">
         <div class="privacy-row">
           <div>
-            <div class="privacy-title">允许管理员查看对话标题</div>
-            <div class="privacy-desc">默认关闭。关闭时管理员只能看到官网对话路径中的 UUID，且不能点击。</div>
+            <div class="privacy-title">{{ t('允许管理员查看对话标题') }}</div>
+            <div class="privacy-desc">{{ t('默认关闭。关闭时管理员只能看到官网对话路径中的 UUID，且不能点击。') }}</div>
           </div>
           <t-switch
             v-model="allowAdminViewConversationTitles"
@@ -46,6 +46,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t } = useWorkspaceCopy()
 
 const quota = ref<any>({ daily: { limit: 0, used: 0 }, monthly: { limit: 0, used: 0 } })
 const loading = ref(false)
@@ -67,7 +70,7 @@ const loadQuota = async () => {
 
 const changePassword = async () => {
   if (!form.current_password || !form.new_password) {
-    MessagePlugin.warning('请完整填写当前密码和新密码')
+    MessagePlugin.warning(t('请完整填写当前密码和新密码'))
     return
   }
   saving.value = true

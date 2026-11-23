@@ -1,20 +1,20 @@
 <template>
-  <div>
-    <t-card title="代理" subtitle="为指定上游账号配置独立的网络出口" :bordered="false">
+  <div class="workspace-page settings-page proxy-page">
+    <t-card :title="t('代理')" :subtitle="t('为指定上游账号配置独立的网络出口')" :bordered="false">
       <t-form :data="formData" label-width="110px" class="proxy-form">
-        <t-form-item label="HTTP 传输">
+        <t-form-item :label="t('HTTP 传输')">
           <template #help>
             <div class="transport-help">
-              <span><strong>reqwest：</strong>稳定兼容，使用 Rust 原生 HTTP/TLS，连接复用成熟，不模拟浏览器网络指纹。</span>
-              <span><strong>wreq：</strong>性能与相似度平衡，使用 Chrome 146 风格的 TLS/HTTP2，保留持久连接池。</span>
-              <span><strong>curl-impersonate：</strong>实验模式，使用 Chrome 146 风格的 TLS/HTTP2 和 libcurl Multi，兼容性与资源占用需自行验证。</span>
-              <span>切换后会立即重建直连、节点及账号连接池；任何模式都不保证阻止上游模型回退。</span>
+              <span><strong>reqwest：</strong>{{ t('稳定兼容，使用 Rust 原生 HTTP/TLS，连接复用成熟，不模拟浏览器网络指纹。') }}</span>
+              <span><strong>wreq：</strong>{{ t('性能与相似度平衡，使用 Chrome 146 风格的 TLS/HTTP2，保留持久连接池。') }}</span>
+              <span><strong>curl-impersonate：</strong>{{ t('实验模式，使用 Chrome 146 风格的 TLS/HTTP2 和 libcurl Multi，兼容性与资源占用需自行验证。') }}</span>
+              <span>{{ t('切换后会立即重建直连、节点及账号连接池；任何模式都不保证阻止上游模型回退。') }}</span>
             </div>
           </template>
           <div class="transport-control">
             <t-radio-group
               v-model="formData.transport_mode"
-              variant="default-filled"
+              variant="outline"
               :disabled="saving"
               @change="handleTransportChange"
             >
@@ -22,12 +22,12 @@
               <t-radio-button value="wreq">wreq</t-radio-button>
               <t-radio-button value="curl-impersonate">curl-impersonate</t-radio-button>
             </t-radio-group>
-            <t-tag theme="primary" variant="light">当前：{{ formData.transport_mode }}</t-tag>
+            <t-tag theme="primary" variant="light">{{ t('当前：') }}{{ formData.transport_mode }}</t-tag>
           </div>
         </t-form-item>
-        <t-form-item label="节点">
+        <t-form-item :label="t('节点')">
           <template #help>
-            <span class="form-help">账号不绑定节点时直连；绑定节点后，只有需要代理的上游域名走该节点。</span>
+            <span class="form-help">{{ t('账号不绑定节点时直连；绑定节点后，只有需要代理的上游域名走该节点。') }}</span>
           </template>
           <div class="node-list">
             <div v-for="node in formData.nodes" :key="node.localKey" class="node-row">
@@ -51,21 +51,21 @@
                 v-model="node.username"
                 :disabled="!node.enabled"
                 clearable
-                placeholder="用户名"
+                :placeholder="t('用户名')"
               />
               <t-input
                 v-model="node.password"
                 :disabled="!node.enabled"
                 type="password"
                 clearable
-                :placeholder="node.has_password ? '已保存（留空保持不变）' : '密码'"
+                :placeholder="node.has_password ? t('已保存（留空保持不变）') : t('密码')"
               />
               <div class="node-actions">
                 <t-button size="small" variant="outline" :loading="testingNodeId === node.localKey" @click="handleTestNode(node)">
-                  测试
+                  {{ t('测试') }}
                 </t-button>
                 <t-button size="small" theme="danger" variant="outline" @click="removeNode(node.localKey)">
-                  删除
+                  {{ t('删除') }}
                 </t-button>
               </div>
             </div>
@@ -73,27 +73,27 @@
         </t-form-item>
         <t-form-item>
           <t-button theme="primary" :loading="saving" @click="handleSave()">
-            保存
+            {{ t('保存') }}
           </t-button>
           <t-button variant="outline" @click="addNode">
-            新增节点
+            {{ t('新增节点') }}
           </t-button>
           <t-button variant="outline" :loading="loading" @click="fetchConfig">
-            刷新
+            {{ t('刷新') }}
           </t-button>
         </t-form-item>
       </t-form>
     </t-card>
     <t-dialog
       :visible="experimentalDialogVisible"
-      header="实验模式警告"
-      confirm-btn="仍然启用"
-      cancel-btn="取消"
+      :header="t('实验模式警告')"
+      :confirm-btn="t('仍然启用')"
+      :cancel-btn="t('取消')"
       @confirm="confirmExperimentalTransport"
       @close="cancelExperimentalTransport"
     >
       <p class="experimental-warning">
-        curl-impersonate 仅用于实验性对照测试。切换后会重建全部上游连接池，可能出现代理兼容、流式响应或运行时依赖问题，也不能保证避免上游模型回退。
+        {{ t('curl-impersonate 仅用于实验性对照测试。切换后会重建全部上游连接池，可能出现代理兼容、流式响应或运行时依赖问题，也不能保证避免上游模型回退。') }}
       </p>
     </t-dialog>
   </div>
@@ -103,6 +103,9 @@
 import { reactive, ref, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t } = useWorkspaceCopy()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -183,12 +186,12 @@ const validateNodes = () => {
   const ids = new Set<number>()
   for (const node of serializeNodes()) {
     if (ids.has(node.id)) {
-      MessagePlugin.warning(`节点 ${node.id} 重复`)
+      MessagePlugin.warning(t('节点 {0} 重复', [node.id]))
       return false
     }
     ids.add(node.id)
     if (node.enabled && !node.proxy_url) {
-      MessagePlugin.warning(`节点 ${node.id} 已启用，请填写代理地址`)
+      MessagePlugin.warning(t('节点 {0} 已启用，请填写代理地址', [node.id]))
       return false
     }
   }
@@ -214,7 +217,7 @@ const handleSave = async (transportChanged = false) => {
     formData.transport_mode = normalizeTransportMode(data.transport_mode)
     lastSavedTransportMode.value = formData.transport_mode
     applyNodes(data.nodes || [])
-    MessagePlugin.success(transportChanged ? `已切换为 ${formData.transport_mode}` : '保存成功')
+    MessagePlugin.success(transportChanged ? t('已切换为 {0}', [formData.transport_mode]) : t('保存成功'))
   } else if (transportChanged) {
     formData.transport_mode = lastSavedTransportMode.value
   }
@@ -255,11 +258,11 @@ const removeNode = (localKey: number) => {
 
 const handleTestNode = async (node: ProxyNodeForm) => {
   if (!node.enabled) {
-    MessagePlugin.warning('请先启用该节点')
+    MessagePlugin.warning(t('请先启用该节点'))
     return
   }
   if (!node.proxy_url.trim()) {
-    MessagePlugin.warning('请输入节点代理地址')
+    MessagePlugin.warning(t('请输入节点代理地址'))
     return
   }
 
@@ -274,7 +277,7 @@ const handleTestNode = async (node: ProxyNodeForm) => {
   testingNodeId.value = null
 
   if (data) {
-    MessagePlugin.success(data.message || `节点 ${node.id} 连接正常`)
+    MessagePlugin.success(data.message || t('节点 {0} 连接正常', [node.id]))
   }
 }
 </script>
@@ -322,7 +325,7 @@ const handleTestNode = async (node: ProxyNodeForm) => {
   padding: 18px;
   border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: #fafaf8;
+  background: var(--app-field);
 }
 
 .node-title {

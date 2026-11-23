@@ -35,10 +35,14 @@ def build_token_expiry_result(account, now=None, error=""):
         error = error or str(exc)
 
     remaining_seconds = None
-    expired = True
-    if isinstance(exp, int):
-        remaining_seconds = exp - now
-        expired = remaining_seconds <= 0
+    expired = None
+    if type(exp) is int:
+        expired = exp <= now
+        if account.access_token_valid:
+            remaining_seconds = exp - now
+    if not account.access_token_valid:
+        exp = None
+        iat = None
 
     return {
         "id": account.id,
@@ -46,6 +50,7 @@ def build_token_expiry_result(account, now=None, error=""):
         "access_token_exp": exp,
         "access_token_iat": iat,
         "remaining_seconds": remaining_seconds,
+        "supported_login_modes": (["api"] if account.access_token_valid else []) + (["web"] if account.session_token_valid else []),
         "expired": expired,
         "access_token_valid": account.access_token_valid,
         "session_token_valid": account.session_token_valid,
@@ -257,7 +262,6 @@ class ChatGPTLoginView(APIView):
             "hide_suggestions": request.user.hide_suggestions,
         }
         payload.update(account_model_policy(request.user, chatgpt))
-        # print(payload)
         res_json = req_gateway("post", "/api/login", json=payload)
 
         ChatgptAccount.objects.filter(id=chatgpt.id).update(login_count=F("login_count") + 1)

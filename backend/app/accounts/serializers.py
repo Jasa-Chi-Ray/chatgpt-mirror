@@ -21,6 +21,8 @@ class ShowVisitLogModelSerializer(serializers.ModelSerializer):
 
 
 class ShowUserAccountModelSerializer(serializers.ModelSerializer):
+    file_isolation = serializers.BooleanField(read_only=True, default=True)
+    is_admin = serializers.SerializerMethodField()
     last_login = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
     date_joined = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
     use_count = serializers.SerializerMethodField()
@@ -28,6 +30,9 @@ class ShowUserAccountModelSerializer(serializers.ModelSerializer):
     conversation_count = serializers.SerializerMethodField()
     message_count = serializers.SerializerMethodField()
     model_message_counts = serializers.SerializerMethodField()
+
+    def get_is_admin(self, obj):
+        return bool(obj.is_staff or obj.is_superuser or obj.username == ADMIN_USERNAME)
 
     def __init__(self, *args, use_count_dict=None, conversation_stats_dict=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -69,6 +74,7 @@ class AddUserAccountSerializer(serializers.Serializer):
     model_limit = serializers.JSONField(default=dict)
     remark = serializers.CharField(default="", allow_blank=True)
     isolated_session = serializers.BooleanField()
+    allow_multiple_sessions = serializers.BooleanField(required=False)
     mcp_isolation = serializers.BooleanField(required=False, default=True)
     skills_isolation = serializers.BooleanField(required=False, default=True)
     model_isolation = serializers.BooleanField(required=False, default=True)

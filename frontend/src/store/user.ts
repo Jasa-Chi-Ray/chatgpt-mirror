@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { detectBrowserIp } from '@/api/browser-ip'
+import { collectLoginFingerprint, getLoginCooldown, LoginCoolingError, LoginVerificationError } from '@/api/login-guard'
 
 const clearAccessibleCookies = () => {
   const cookies = document.cookie.split(';')
@@ -26,6 +27,8 @@ const parseJsonResponse = async (response: Response, fallbackMessage: string) =>
   }
 
   if (!response.ok) {
+    if (typeof data?.remaining_seconds === 'number') throw new LoginCoolingError(data.remaining_seconds)
+    if (data?.code === 'fingerprint_required') throw new LoginVerificationError(data.message || '浏览器渲染验证未完成，请重新检测。')
     throw new Error(data?.message || data?.detail || `${fallbackMessage}（HTTP ${response.status}）`)
   }
 
@@ -59,6 +62,9 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const login = async (url: string, data: any, beforeConfirm: () => void = () => {}) => {
+    const seconds = await getLoginCooldown()
+    if (seconds > 0) throw new LoginCoolingError(seconds)
+    const fingerprint = await collectLoginFingerprint()
     const browserIpPromise = detectBrowserIp()
     await prepareCsrf()
     const response = await fetch(url, {
@@ -67,7 +73,7 @@ export const useUserStore = defineStore('user', () => {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken.value
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify({ ...data, fingerprint })
     })
 
     const prepared = await parseJsonResponse(response, '登录失败')
@@ -78,7 +84,7 @@ export const useUserStore = defineStore('user', () => {
     const confirmation = await fetch('/0x/user/login-confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken.value },
-      body: JSON.stringify({ login_ticket: prepared.login_ticket, browser_ip: browserIp })
+      body: JSON.stringify({ login_ticket: prepared.login_ticket, browser_ip: browserIp, fingerprint })
     })
     const result = await parseJsonResponse(confirmation, '登录确认失败')
     

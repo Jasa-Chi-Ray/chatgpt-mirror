@@ -39,15 +39,15 @@ def _update_token(chatgpt_username, chatgpt_token, client_id=None):
     res_json = res.json()
 
     if res.status_code != 200:
-        logger.info("token 更新失败: account=%s status=%s", chatgpt_username, res.status_code)
         message = res_json.get("message", "") if isinstance(res_json, dict) else str(res_json)
         if (
             "token 失效" in message
             or "authentication token" in message
             or "refresh_token" in message
         ):
-            logger.warning("token 失效: account=%s status=%s", chatgpt_username, res.status_code)
+            logger.warning("token 失效: status=%s", res.status_code)
             return False
+        logger.warning("token 更新失败: status=%s", res.status_code)
         return None
 
     res_json["auth_status"] = True
@@ -71,14 +71,14 @@ def update_access_token():
                 if update_status is False:
                     locked.refresh_token = None
                     locked.save()
-                    logger.warning("refresh_token 已经过期: account=%s", locked.chatgpt_username)
+                    logger.warning("refresh_token 已经过期: account_id=%s", locked.pk)
 
         elif line.session_token:
             update_status = _update_token(line.chatgpt_username, line.session_token)
             if update_status is False:
                 line.session_token = None
                 line.save()
-                logger.warning("session_token 已经过期: account=%s", line.chatgpt_username)
+                logger.warning("session_token 已经过期: account_id=%s", line.pk)
 
 
 def check_access_token():
@@ -90,9 +90,9 @@ def check_access_token():
                 line.auth_status = False
                 line.updated_time = int(time.time())
                 line.save()
-                logger.warning(f"access_token 已经过期: {line.chatgpt_username}")
+                logger.warning("access_token 已经过期: account_id=%s", line.pk)
                 return
             else:
                 line.updated_time = int(time.time())
                 line.save()
-                logger.info(f"access_token 有效: {line.chatgpt_username}")
+                logger.debug("access_token 有效: account_id=%s", line.pk)

@@ -1,5 +1,8 @@
 from django.contrib.auth.models import AbstractUser, AbstractBaseUser
 import uuid
+import hashlib
+import secrets
+from django.conf import settings
 from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -10,6 +13,10 @@ class User(AbstractUser):
     authorization_version = models.UUIDField(default=uuid.uuid4, editable=False)
 
     def save(self, *args, **kwargs):
+        if self.is_staff or self.is_superuser or self.username == settings.ADMIN_USERNAME:
+            self.allow_multiple_sessions = False
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"allow_multiple_sessions"}
         # Persist the permission change and its revocation outbox entry together.
         with transaction.atomic():
             return super().save(*args, **kwargs)
@@ -17,6 +24,7 @@ class User(AbstractUser):
     model_limit = models.JSONField(default=list, verbose_name="备注")
     remark = models.TextField(blank=True, verbose_name="备注")
     isolated_session = models.BooleanField(default=True, verbose_name="独立回话")
+    allow_multiple_sessions = models.BooleanField(default=False, verbose_name="允许多会话登录")
     mcp_isolation = models.BooleanField(default=True, verbose_name="MCP 隔离")
     skills_isolation = models.BooleanField(default=True, verbose_name="Skills 隔离")
     model_isolation = models.BooleanField(default=True, verbose_name="模型隔离")
@@ -37,6 +45,27 @@ class User(AbstractUser):
         default=False,
         verbose_name="允许管理员查看对话标题",
     )
+
+    @property
+    def can_use_multiple_sessions(self):
+        return bool(self.allow_multiple_sessions and not self.is_staff and not self.is_superuser
+                    and self.username not in (settings.ADMIN_USERNAME, settings.FREE_ACCOUNT_USERNAME))
+
+
+class LoginSession(models.Model):
+    key = models.CharField(max_length=64, primary_key=True, editable=False)
+    key_digest = models.CharField(max_length=64, unique=True, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            self.key = secrets.token_hex(32)
+        self.key_digest = hashlib.sha256(self.key.encode()).hexdigest()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.key
 
 
 class VisitorSession(models.Model):
@@ -122,8 +151,24 @@ class Announcement(models.Model):
         )
 
 
+class LoginGuardMutex(models.Model):
+    touched_at = models.DateTimeField(default=timezone.now)
+
+
+class LoginFailureState(models.Model):
+    key = models.CharField(max_length=64, primary_key=True)
+    account_digest = models.CharField(max_length=64, db_index=True)
+    ip = models.GenericIPAddressField()
+    failures = models.PositiveIntegerField(default=0)
+    fingerprint = models.JSONField(default=dict)
+    fingerprint_anchor = models.CharField(max_length=40, blank=True, db_index=True)
+    blocked_until = models.DateTimeField(null=True, db_index=True)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+
 class VisitLog(models.Model):
-    # user = models.ForeignKey(User, db_constraint=False, on_delete=models.SET_NULL, null=True)
+    failure_count = models.PositiveIntegerField(default=0)
+    cooldown_seconds = models.PositiveIntegerField(default=0)
     username = models.CharField(max_length=150, verbose_name="用户名")
     chatgpt_username = models.CharField(max_length=150, null=True, verbose_name="chatgpt")
     log_type = models.CharField(max_length=20, verbose_name="登录类型")

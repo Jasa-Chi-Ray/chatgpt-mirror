@@ -9,12 +9,12 @@ from django.dispatch import receiver
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 
-from app.accounts.models import User, VisitorSession, GatewayRevocation
+from app.accounts.models import User, VisitorSession, GatewayRevocation, LoginSession
 from app.accounts.session_authority import authorization_version
 from app.utils import req_gateway
 
 POLICY_FIELDS = ("username", "password", "is_active", "expired_date", "gptcar_list", "model_limit",
-                 "isolated_session", "mcp_isolation", "skills_isolation", "mcp_allowlist",
+                 "isolated_session", "allow_multiple_sessions", "mcp_isolation", "skills_isolation", "mcp_allowlist",
                  "skills_allowlist", "capability_policy_initialized", "force_chat_mode",
                  "model_isolation", "model_policies",
                  "hide_chat_work_toggle", "hide_library", "hide_suggestions",
@@ -60,6 +60,7 @@ def deliver(event_id):
 
 
 @receiver(pre_delete, sender=Token)
+@receiver(pre_delete, sender=LoginSession)
 def token_deleted(sender, instance, **kwargs):
     enqueue(instance.user, instance)
 
@@ -80,9 +81,11 @@ def policy_changing(sender, instance, update_fields=None, raw=False, **kwargs):
         instance.authorization_version = old.authorization_version
     if old and any(getattr(old, field) != getattr(instance, field)
                    for field in POLICY_FIELDS if update_fields is None or field in update_fields):
-        token = Token.objects.filter(user_id=old.pk).first()
-        if token:
+        tokens = list(Token.objects.filter(user_id=old.pk)) + list(LoginSession.objects.filter(user_id=old.pk))
+        for token in tokens:
             enqueue(old, token)
+        if old.can_use_multiple_sessions and not instance.can_use_multiple_sessions:
+            LoginSession.objects.filter(user_id=old.pk).delete()
         # update_fields may exclude this internal field: update it inside the same transaction.
         instance.authorization_version = uuid.uuid4()
         User.objects.filter(pk=old.pk).update(authorization_version=instance.authorization_version)

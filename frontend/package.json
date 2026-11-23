@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "dayjs": "^1.11.10",
-    "js-cookie": "^3.0.5",
-    "markdown-it": "^15.0.0",
+    "js-cookie": "^3.0.7",
+    "markdown-it": "^15.0.3",
+    "modern-screenshot": "4.7.0",
     "pinia": "^2.1.7",
+    "tdesign-icons-vue-next": "0.4.2",
     "tdesign-vue-next": "^1.8.0",
-    "vue": "^3.4.0",
+    "vue": "^3.5.42",
     "vue-router": "^4.2.5"
   },
   "devDependencies": {

@@ -17,8 +17,9 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
-from app.accounts.models import User, PendingLogin, VisitorSession
+from app.accounts.models import User, PendingLogin, VisitorSession, LoginSession
 from app.accounts.authentication import AUTH_COOKIE_NAME, ExpiringCookieTokenAuthentication, clear_auth_cookie, set_auth_cookie
+from app.accounts.login_guard import LoginAdmissionPermission
 from app.accounts.session_authority import digest
 from django.core import signing
 from django.utils.crypto import constant_time_compare
@@ -85,31 +86,40 @@ def pending_login(request, user, expires_at, *, visitor=False):
     return Response({"authenticated": False, "login_ticket": raw})
 
 
-class LoginIpRateThrottle(SimpleRateThrottle):
-    scope = "login_ip"
+class LoginFingerprintRateThrottle(SimpleRateThrottle):
+    scope = "login_fingerprint"
 
     def get_cache_key(self, request, view):
-        # The gateway overwrites this address and Django is an internal service.
-        digest = hashlib.sha256(get_client_ip(request).encode()).hexdigest()
-        return self.cache_format % {"scope": self.scope, "ident": digest}
-
-
-class LoginAccountRateThrottle(SimpleRateThrottle):
-    scope = "login_account"
-
-    def get_cache_key(self, request, view):
-        username = str(request.data.get("username") or "").strip().lower()
-        if not username:
+        from app.accounts.login_guard import fingerprint_key, request_fingerprint, valid_api_session
+        if valid_api_session(request):
             return None
-        digest = hashlib.sha256(username.encode()).hexdigest()
+        ident = fingerprint_key(request_fingerprint(request))
+        return self.cache_format % {"scope": self.scope, "ident": ident} if ident else None
+
+
+class LoginAccountRateThrottle(LoginFingerprintRateThrottle):
+    scope = "login_account_fingerprint"
+
+    def get_cache_key(self, request, view):
+        renderer = super().get_cache_key(request, view)
+        username = str(request.data.get("username") or "").strip().lower()
+        if not renderer or not username:
+            return None
+        digest = hashlib.sha256((renderer + ":" + username).encode()).hexdigest()
         return self.cache_format % {"scope": self.scope, "ident": digest}
 
 
-class LoginConfirmRateThrottle(LoginIpRateThrottle):
+class LoginConfirmRateThrottle(LoginFingerprintRateThrottle):
     scope = "login_confirm"
 
 
 def issue_user_token(user, *, rotate=False):
+    if user.can_use_multiple_sessions:
+        LoginSession.objects.filter(user=user, created__lte=timezone.now() - timedelta(
+            seconds=settings.API_TOKEN_TTL_SECONDS,
+        )).delete()
+        return LoginSession.objects.create(user=user)
+    LoginSession.objects.filter(user=user).delete()
     if rotate:
         Token.objects.filter(user=user).delete()
         return Token.objects.create(user=user)
@@ -119,7 +129,8 @@ def issue_user_token(user, *, rotate=False):
 
 class UserFreeLoginView(APIView):
     authentication_classes = ()
-    throttle_classes = (LoginIpRateThrottle,)
+    permission_classes = (LoginAdmissionPermission,)
+    throttle_classes = (LoginFingerprintRateThrottle,)
 
     def post(self, request):
         ExpiringCookieTokenAuthentication._enforce_csrf(request)
@@ -131,14 +142,29 @@ class UserFreeLoginView(APIView):
 
 
 class AccountLogin(ObtainAuthToken):
+    from app.request_parsers import AccessJSONParser, AccessFormParser, AccessMultiPartParser
+    parser_classes = (AccessJSONParser, AccessFormParser, AccessMultiPartParser)
     authentication_classes = ()
-    throttle_classes = (LoginIpRateThrottle, LoginAccountRateThrottle)
+    permission_classes = (LoginAdmissionPermission,)
+    throttle_classes = (LoginFingerprintRateThrottle, LoginAccountRateThrottle)
 
     def post(self, request, *args, **kwargs):
         ExpiringCookieTokenAuthentication._enforce_csrf(request)
         expires_at = verify_turnstile(request, "login")
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        from app.accounts.login_guard import record_failure, reset_failures, LoginCooling, valid_api_session
+        try:
+            serializer.is_valid(raise_exception=True)
+        except ValidationError:
+            username = str(request.data.get("username") or "").strip()
+            password = str(request.data.get("password") or "")
+            account = User.objects.filter(username=username).first()
+            if username and password and (account is None or not account.check_password(password)):
+                seconds = record_failure(request, username)
+                if seconds and not valid_api_session(request):
+                    raise LoginCooling(seconds)
+            raise
+        reset_failures(request, str(request.data.get("username") or ""))
 
         user = serializer.validated_data['user']
         if user.expired_date and user.expired_date <= timezone.now().date():
@@ -149,6 +175,7 @@ class AccountLogin(ObtainAuthToken):
 
 class ConfirmLogin(APIView):
     authentication_classes = ()
+    permission_classes = (LoginAdmissionPermission,)
     throttle_classes = (LoginConfirmRateThrottle,)
 
     def post(self, request):
@@ -160,7 +187,7 @@ class ConfirmLogin(APIView):
             if (not ticket or not constant_time_compare(
                     ticket.csrf_digest, digest(request.META.get("CSRF_COOKIE", "")))):
                 raise ValidationError({"message": "登录确认已失效，请重新验证"})
-            user = ticket.user
+            user = User.objects.select_for_update().get(pk=ticket.user_id)
             if (not user.is_active or
                     (user.expired_date and user.expired_date <= timezone.localdate()) or
                     ticket.password_digest != digest(user.password)):
@@ -173,7 +200,10 @@ class ConfirmLogin(APIView):
                 Token.objects.filter(user=user, created__lte=timezone.now() - timedelta(
                     seconds=settings.API_TOKEN_TTL_SECONDS,
                 )).delete()
-            token = issue_user_token(user, rotate=not ticket.visitor)
+            if ticket.visitor:
+                token, _ = Token.objects.get_or_create(user=user)
+            else:
+                token = issue_user_token(user, rotate=True)
             user.last_login = timezone.now()
             user.save(update_fields=["last_login"])
             request.user = user
@@ -194,6 +224,45 @@ class ConfirmLogin(APIView):
             return response
 
 
+def revoke_local_login_session(raw, free_session=""):
+    # Revoke only the presented local login; the shared upstream token is untouched.
+    raw = str(raw or "")
+    token_model = LoginSession if len(raw) == 64 else Token
+    token = token_model.objects.select_related("user").filter(key=raw).first() if len(raw) in (40, 64) else None
+    subject = None
+    if token:
+        user = token.user
+        if user.username == FREE_ACCOUNT_USERNAME:
+            from app.utils import FREE_SESSION_SALT
+            try:
+                sid = signing.loads(free_session or "", salt=FREE_SESSION_SALT)["sid"]
+                VisitorSession.objects.filter(sid=sid, user=user).delete()
+                subject = f"{user.username}:{sid}"
+            except (signing.BadSignature, KeyError, TypeError):
+                pass
+        else:
+            subject = user.username
+            token.delete()
+            if not isinstance(token, LoginSession):
+                PendingLogin.objects.filter(user=user).delete()
+    from app.accounts.models import GatewayRevocation
+    return bool(subject and GatewayRevocation.objects.filter(subject=subject).exists())
+
+
+class GatewayLogoutView(APIView):
+    authentication_classes = ()
+    permission_classes = ()
+    throttle_classes = ()
+
+    def post(self, request):
+        secret = settings.GATEWAY_ADMIN_SECRET
+        if not secret or not constant_time_compare(request.headers.get("Authorization", ""), "Bearer " + secret):
+            from rest_framework.exceptions import AuthenticationFailed
+            raise AuthenticationFailed("无效的网关认证")
+        pending = revoke_local_login_session(request.data.get("session_token", ""), request.data.get("free_session", ""))
+        return Response({"logged_out": True, "gateway_cleanup_pending": pending})
+
+
 class AccountLogout(APIView):
     authentication_classes = ()
     permission_classes = ()
@@ -204,24 +273,7 @@ class AccountLogout(APIView):
         authorization = request.headers.get("Authorization", "").split()
         if len(authorization) == 2 and authorization[0].lower() == "token":
             raw = authorization[1]
-        token = Token.objects.select_related("user").filter(key=raw).first()
-        subject = None
-        if token:
-            user = token.user
-            if user.username == FREE_ACCOUNT_USERNAME:
-                from app.utils import FREE_SESSION_SALT
-                try:
-                    sid = signing.loads(request.COOKIES.get("free_session", ""), salt=FREE_SESSION_SALT)["sid"]
-                    VisitorSession.objects.filter(sid=sid, user=user).delete()
-                    subject = f"{user.username}:{sid}"
-                except (signing.BadSignature, KeyError, TypeError):
-                    pass
-            else:
-                subject = user.username
-                token.delete()
-                PendingLogin.objects.filter(user=user).delete()
-        from app.accounts.models import GatewayRevocation
-        cleanup_pending = bool(subject and GatewayRevocation.objects.filter(subject=subject).exists())
+        cleanup_pending = revoke_local_login_session(raw, request.COOKIES.get("free_session", ""))
         response = Response({"message": "退出成功", "gateway_cleanup_pending": cleanup_pending})
         response.delete_cookie("free_session", path="/", samesite="Strict")
         clear_auth_cookie(response)
@@ -230,7 +282,8 @@ class AccountLogout(APIView):
 
 class AccountRegister(APIView):
     authentication_classes = ()
-    throttle_classes = (LoginIpRateThrottle, LoginAccountRateThrottle)
+    permission_classes = (LoginAdmissionPermission,)
+    throttle_classes = (LoginFingerprintRateThrottle, LoginAccountRateThrottle)
     def post(self, request, *args, **kwargs):
         ExpiringCookieTokenAuthentication._enforce_csrf(request)
         expires_at = verify_turnstile(request, "register")
@@ -266,3 +319,41 @@ class AccountRegister(APIView):
             )
 
         return pending_login(request, user, expires_at)
+
+
+
+class LoginStatusView(APIView):
+    authentication_classes = ()
+    permission_classes = ()
+    throttle_classes = ()
+    def post(self, request):
+        from app.accounts.login_guard import attach_fingerprint, request_fingerprint, fingerprint, remaining, valid_api_session, FingerprintRequired
+        # Existing sessions never depend on render collection or receipt renewal.
+        if valid_api_session(request):
+            return Response({"remaining_seconds": 0})
+        fp = request_fingerprint(request)
+        if not fp:
+            data = request.data
+            fp = fingerprint(data.get("fingerprint")) if isinstance(data, dict) else {}
+        if not fp:
+            raise FingerprintRequired()
+        seconds = remaining(fp)
+        return attach_fingerprint(Response({"remaining_seconds": seconds}), fp)
+
+
+class LoginGuardView(APIView):
+    authentication_classes = ()
+    permission_classes = ()
+    throttle_classes = ()
+    def post(self, request):
+        from app.accounts.login_guard import remaining, valid_api_session, COOKIE
+        from types import SimpleNamespace
+        if not constant_time_compare(request.headers.get("X-Gateway-Secret", ""), settings.GATEWAY_ADMIN_SECRET):
+            return Response({}, status=401)
+        cookies = {AUTH_COOKIE_NAME: str(request.data.get("api_token", "")),
+                   "free_session": str(request.data.get("free_session", "")), COOKIE: str(request.data.get("fingerprint_cookie", ""))}
+        proxy = SimpleNamespace(COOKIES=cookies, headers={}, META={}, data={})
+        authenticated = valid_api_session(proxy)
+        from app.accounts.login_guard import request_fingerprint
+        seconds = 0 if authenticated else remaining(request_fingerprint(proxy))
+        return Response({"authenticated": authenticated, "remaining_seconds": seconds})

@@ -43,6 +43,7 @@ target/
 /gateway/static/
 
 # Runtime logs and local databases
+/data/
 /backend/logs/*
 !/backend/logs/.gitkeep
 /backend/db/*.db

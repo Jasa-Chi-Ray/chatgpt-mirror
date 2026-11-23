@@ -1,16 +1,16 @@
 <template>
-  <div>
-    <t-card title="模型管理" :bordered="false">
+  <div class="workspace-page data-page models-page">
+    <t-card :title="t('模型管理')" :bordered="false">
       <template #actions>
         <t-button theme="primary" @click="showAddDialog">
           <template #icon><t-icon name="add" /></template>
-          添加模型
+          {{ t('添加模型') }}
         </t-button>
       </template>
 
       <t-table
         :data="tableData"
-        :columns="columns"
+        :columns="labels(columns)"
         :loading="loading"
         row-key="id"
       >
@@ -22,9 +22,9 @@
         </template>
         <template #op="{ row }">
           <t-space>
-            <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
-            <t-popconfirm content="确定删除该模型吗？" @confirm="handleDelete(row)">
-              <t-link theme="danger">删除</t-link>
+            <t-link theme="primary" @click="showEditDialog(row)">{{ t('编辑') }}</t-link>
+            <t-popconfirm :content="t('确定删除该模型吗？')" @confirm="handleDelete(row)">
+              <t-link theme="danger">{{ t('删除') }}</t-link>
             </t-popconfirm>
           </t-space>
         </template>
@@ -34,26 +34,26 @@
     <!-- 添加/编辑对话框 -->
     <t-dialog
       :visible="dialogVisible"
-      :header="isEdit ? '编辑模型' : '添加模型'"
+      :header="isEdit ? t('编辑模型') : t('添加模型')"
       :confirm-btn="{ loading: submitLoading }"
       @confirm="handleSubmit"
       @close="dialogVisible = false"
     >
       <t-form :data="formData" :rules="formRules" ref="formRef" label-width="100px">
-        <t-form-item label="模型ID" name="id">
+        <t-form-item :label="t('模型ID')" name="id">
           <t-input 
             v-model="formData.id" 
             :disabled="isEdit" 
-            placeholder="请输入模型ID，如 gpt-4o" 
+            :placeholder="t('请输入模型ID，如 gpt-4o')" 
           />
         </t-form-item>
-        <t-form-item label="显示名称" name="name">
-          <t-input v-model="formData.name" placeholder="请输入显示名称" />
+        <t-form-item :label="t('显示名称')" name="name">
+          <t-input v-model="formData.name" :placeholder="t('请输入显示名称')" />
         </t-form-item>
-        <t-form-item label="描述" name="description">
-          <t-textarea v-model="formData.description" placeholder="请输入模型描述" />
+        <t-form-item :label="t('描述')" name="description">
+          <t-textarea v-model="formData.description" :placeholder="t('请输入模型描述')" />
         </t-form-item>
-        <t-form-item label="启用" name="enabled">
+        <t-form-item :label="t('启用')" name="enabled">
           <t-switch v-model="formData.enabled" />
         </t-form-item>
       </t-form>
@@ -65,6 +65,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t, labels } = useWorkspaceCopy()
 
 interface ModelInfo {
   id: string
@@ -157,7 +160,7 @@ const handleSubmit = async () => {
   submitLoading.value = false
 
   if (data) {
-    MessagePlugin.success(isEdit.value ? '更新成功' : '添加成功')
+    MessagePlugin.success(isEdit.value ? t('更新成功') : t('添加成功'))
     dialogVisible.value = false
     fetchData()
   }
@@ -170,7 +173,7 @@ const handleToggle = async (row: ModelInfo, enabled: boolean) => {
   })
   
   if (data) {
-    MessagePlugin.success('状态更新成功')
+    MessagePlugin.success(t('状态更新成功'))
     fetchData()
   }
 }
@@ -178,7 +181,7 @@ const handleToggle = async (row: ModelInfo, enabled: boolean) => {
 const handleDelete = async (row: ModelInfo) => {
   const data = await request('/0x/models', 'DELETE', { id: row.id })
   if (data) {
-    MessagePlugin.success('删除成功')
+    MessagePlugin.success(t('删除成功'))
     fetchData()
   }
 }

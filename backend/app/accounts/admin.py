@@ -14,6 +14,7 @@ class UserAdmin(admin.ModelAdmin):
         "is_active",
         "username",
         "isolated_session",
+        "allow_multiple_sessions",
         "mcp_isolation",
         "skills_isolation",
         "remark",
@@ -30,6 +31,11 @@ class UserAdmin(admin.ModelAdmin):
         "email",
         "groups",
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj and (obj.is_staff or obj.is_superuser):
+            return ("allow_multiple_sessions",)
+        return ()
 
 
 @admin.register(Announcement)

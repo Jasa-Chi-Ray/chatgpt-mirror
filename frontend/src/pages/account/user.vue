@@ -1,26 +1,26 @@
 <template>
-  <div>
-    <t-card title="用户" subtitle="管理可访问系统的用户、账号池和模型权限" :bordered="false">
+  <div class="workspace-page data-page users-page">
+    <t-card :title="t('用户')" :subtitle="t('管理可访问系统的用户、账号池和模型权限')" :bordered="false">
       <template #actions>
         <t-button theme="primary" @click="showAddDialog">
           <template #icon><t-icon name="add" /></template>
-          添加用户
+          {{ t('添加用户') }}
         </t-button>
       </template>
       <div class="table-toolbar">
-        <t-input v-model="query" clearable placeholder="搜索用户名或备注" @enter="applyFilters" />
-        <t-select v-model="statusFilter" clearable placeholder="全部状态" @change="applyFilters">
-          <t-option value="active" label="启用" />
-          <t-option value="inactive" label="禁用" />
+        <t-input v-model="query" clearable :placeholder="t('搜索用户名或备注')" @enter="applyFilters" />
+        <t-select v-model="statusFilter" clearable :placeholder="t('全部状态')" @change="applyFilters">
+          <t-option value="active" :label="t('启用')" />
+          <t-option value="inactive" :label="t('禁用')" />
         </t-select>
-        <t-button variant="outline" @click="applyFilters">查询</t-button>
-        <t-button variant="outline" :disabled="!selectedRowKeys.length" @click="batchAction('activate')">批量启用</t-button>
-        <t-button variant="outline" :disabled="!selectedRowKeys.length" @click="batchAction('deactivate')">批量禁用</t-button>
+        <t-button variant="outline" @click="applyFilters">{{ t('查询') }}</t-button>
+        <t-button variant="outline" :disabled="!selectedRowKeys.length" @click="batchAction('activate')">{{ t('批量启用') }}</t-button>
+        <t-button variant="outline" :disabled="!selectedRowKeys.length" @click="batchAction('deactivate')">{{ t('批量禁用') }}</t-button>
       </div>
 
       <t-table
         :data="tableData"
-        :columns="columns"
+        :columns="labels(columns)"
         :loading="loading"
         :pagination="pagination"
         @page-change="onPageChange"
@@ -29,20 +29,25 @@
       >
         <template #is_active="{ row }">
           <t-tag :theme="row.is_active ? 'success' : 'danger'">
-            {{ row.is_active ? '启用' : '禁用' }}
+            {{ row.is_active ? t('启用') : t('禁用') }}
           </t-tag>
         </template>
         <template #expired_date="{ row }">
-          {{ row.expired_date || '永久' }}
+          {{ row.expired_date || t('永久') }}
+        </template>
+        <template #allow_multiple_sessions="{ row }">
+          <t-tag :theme="row.allow_multiple_sessions && !row.is_admin ? 'success' : 'default'">
+            {{ row.allow_multiple_sessions && !row.is_admin ? t('多会话') : t('单会话') }}
+          </t-tag>
         </template>
         <template #model_limit="{ row }">
           <t-tag :theme="row.model_isolation !== false ? 'success' : 'default'">
-            {{ row.model_isolation !== false ? '按账号' : '不隔离' }}
+            {{ row.model_isolation !== false ? t('按账号') : t('不隔离') }}
           </t-tag>
         </template>
         <template #force_chat_mode="{ row }">
           <t-tag :theme="row.force_chat_mode !== false ? 'success' : 'default'">
-            {{ row.force_chat_mode !== false ? '自动切回' : '允许 Work' }}
+            {{ row.force_chat_mode !== false ? t('自动切回') : t('允许 Work') }}
           </t-tag>
         </template>
         <template #model_message_counts="{ row }">
@@ -56,24 +61,24 @@
               {{ model }}: {{ count }}
             </t-tag>
           </t-space>
-          <span v-else class="text-gray">暂无</span>
+          <span v-else class="text-gray">{{ t('暂无') }}</span>
         </template>
         <template #op="{ row }">
           <t-space>
-            <t-link theme="primary" @click="showStatisticsDialog(row)">对话统计</t-link>
+            <t-link theme="primary" @click="showStatisticsDialog(row)">{{ t('对话统计') }}</t-link>
             <t-link theme="primary" @click="showCapabilityDialog(row)">MCP&amp;Skills</t-link>
-            <t-link theme="primary" @click="showModelDialog(row)">模型与频率</t-link>
-            <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
+            <t-link theme="primary" @click="showModelDialog(row)">{{ t('模型与频率') }}</t-link>
+            <t-link theme="primary" @click="showEditDialog(row)">{{ t('编辑') }}</t-link>
             <t-popconfirm
-              content="确定撤销该用户的全部登录会话吗？用户将返回登录页面。"
+              :content="t('确定撤销该用户的全部登录会话吗？用户将返回登录页面。')"
               @confirm="handleRevokeSessions(row)"
             >
               <t-link theme="warning" :disabled="revokingUserId === row.id">
-                {{ revokingUserId === row.id ? '撤销中…' : '撤销会话' }}
+                {{ revokingUserId === row.id ? t('撤销中…') : t('撤销会话') }}
               </t-link>
             </t-popconfirm>
-            <t-popconfirm content="确定删除该用户吗？" @confirm="handleDelete(row)">
-              <t-link theme="danger">删除</t-link>
+            <t-popconfirm :content="t('确定删除该用户吗？')" @confirm="handleDelete(row)">
+              <t-link theme="danger">{{ t('删除') }}</t-link>
             </t-popconfirm>
           </t-space>
         </template>
@@ -83,93 +88,116 @@
     <!-- 添加/编辑对话框 -->
     <t-dialog
       :visible="dialogVisible"
-      :header="isEdit ? '编辑用户' : '添加用户'"
+      :header="isEdit ? t('编辑用户') : t('添加用户')"
       :confirm-btn="{ loading: submitLoading }"
       @confirm="handleSubmit"
       @close="dialogVisible = false"
       width="600px"
     >
       <t-form :data="formData" :rules="formRules" ref="formRef" label-width="100px">
-        <t-form-item label="用户名" name="username">
-          <t-input v-model="formData.username" :disabled="isEdit" placeholder="请输入用户名" />
+        <t-form-item :label="t('用户名')" name="username">
+          <t-input v-model="formData.username" :disabled="isEdit" :placeholder="t('请输入用户名')" />
         </t-form-item>
-        <t-form-item label="密码" name="password">
-          <t-input v-model="formData.password" type="password" :placeholder="isEdit ? '留空则不修改' : '请输入密码'" />
+        <t-form-item :label="t('密码')" name="password">
+          <t-input v-model="formData.password" type="password" :placeholder="isEdit ? t('留空则不修改') : t('请输入密码')" />
         </t-form-item>
-        <t-form-item label="是否启用" name="is_active">
+        <t-form-item :label="t('是否启用')" name="is_active">
           <t-switch v-model="formData.is_active" />
         </t-form-item>
-        <t-form-item label="项目与对话隔离" name="isolated_session">
+        <t-form-item :label="t('多会话登录')" name="allow_multiple_sessions">
+          <t-switch v-model="formData.allow_multiple_sessions" :disabled="formData.is_admin" />
+          <template #help>
+            <span class="form-help">{{ formData.is_admin ? t('管理员始终只能使用单会话') : t('允许多个设备同时登录；关闭后已有多会话登录将被撤销，需重新登录') }}</span>
+          </template>
+        </t-form-item>
+        <t-form-item :label="t('项目与对话隔离')" name="isolated_session">
           <t-switch v-model="formData.isolated_session" />
           <template #help>
-            <span class="form-help">按镜像用户隔离项目、项目文件和对话</span>
+            <span class="form-help">{{ t('按镜像用户隔离项目和对话') }}</span>
           </template>
         </t-form-item>
-        <t-form-item label="MCP 隔离" name="mcp_isolation">
+        <t-form-item :label="t('Library 隔离')" name="hide_library">
+          <div class="library-settings">
+            <div class="library-settings__status">
+              <t-switch :value="true" disabled role="switch" :aria-label="t('Library 隔离')" aria-checked="true" aria-disabled="true" />
+              <span class="form-help">{{ t('已为所有用户开启') }}</span>
+            </div>
+            <div class="library-settings__visibility">
+              <span id="library-entry-visibility-label">{{ t('是否隐藏入口') }}</span>
+              <t-switch
+                v-model="formData.hide_library"
+                role="switch"
+                aria-labelledby="library-entry-visibility-label"
+                :aria-checked="formData.hide_library"
+                tabindex="0"
+                @keydown.space.prevent="formData.hide_library = !formData.hide_library"
+                @keydown.enter.prevent="formData.hide_library = !formData.hide_library"
+              />
+            </div>
+          </div>
+          <template #help>
+            <span class="form-help">{{ t('文件、目录、搜索及下载按镜像用户隔离') }}</span>
+          </template>
+        </t-form-item>
+        <t-form-item :label="t('MCP 隔离')" name="mcp_isolation">
           <t-switch v-model="formData.mcp_isolation" />
         </t-form-item>
-        <t-form-item label="Skills 隔离" name="skills_isolation">
+        <t-form-item :label="t('Skills 隔离')" name="skills_isolation">
           <t-switch v-model="formData.skills_isolation" />
         </t-form-item>
-        <t-form-item label="模型隔离" name="model_isolation">
+        <t-form-item :label="t('模型隔离')" name="model_isolation">
           <t-switch v-model="formData.model_isolation" />
           <template #help>
-            <span class="form-help">仅限制普通 Chat 模型；Work 模型不参与隔离和频率限制</span>
+            <span class="form-help">{{ t('仅限制普通 Chat 模型；Work 模型不参与隔离和频率限制') }}</span>
           </template>
         </t-form-item>
-        <t-form-item label="自动退出 Work" name="force_chat_mode">
+        <t-form-item :label="t('自动退出 Work')" name="force_chat_mode">
           <t-switch v-model="formData.force_chat_mode" @change="handleForceChatModeChange" />
           <template #help>
-            <span class="form-help">开启后检测到 Work 模式会自动点击“聊天 / Chat”切回聊天模式</span>
+            <span class="form-help">{{ t('开启后检测到 Work 模式会自动点击“聊天 / Chat”切回聊天模式') }}</span>
           </template>
         </t-form-item>
-        <t-form-item v-if="formData.force_chat_mode" label="隐藏切换栏" name="hide_chat_work_toggle">
+        <t-form-item v-if="formData.force_chat_mode" :label="t('隐藏切换栏')" name="hide_chat_work_toggle">
           <t-switch v-model="formData.hide_chat_work_toggle" />
           <template #help>
-            <span class="form-help">隐藏聊天/工作切换栏；进入 Work 时显示切换栏并自动点击聊天，切回后再隐藏</span>
+            <span class="form-help">{{ t('隐藏聊天/工作切换栏；进入 Work 时显示切换栏并自动点击聊天，切回后再隐藏') }}</span>
           </template>
         </t-form-item>
-        <t-form-item label="隐藏资料库" name="hide_library">
-          <t-switch v-model="formData.hide_library" />
-          <template #help>
-            <span class="form-help">隐藏侧边栏资料库，并禁止访问资料库文件列表接口</span>
-          </template>
-        </t-form-item>
-        <t-form-item label="隐藏建议" name="hide_suggestions">
+        <t-form-item :label="t('隐藏建议')" name="hide_suggestions">
           <t-switch v-model="formData.hide_suggestions" />
           <template #help>
-            <span class="form-help">隐藏 ChatGPT 首页输入框下方的建议卡片</span>
+            <span class="form-help">{{ t('隐藏 ChatGPT 首页输入框下方的建议卡片') }}</span>
           </template>
         </t-form-item>
-        <t-form-item label="过期日期" name="expired_date">
+        <t-form-item :label="t('过期日期')" name="expired_date">
           <t-date-picker
             v-model="formData.expired_date"
             format="YYYY-MM-DD"
             value-type="YYYY-MM-DD"
             clearable
-            placeholder="留空则永久有效"
+            :placeholder="t('留空则永久有效')"
           />
         </t-form-item>
-        <t-form-item label="每日配额" name="daily_quota">
+        <t-form-item :label="t('每日配额')" name="daily_quota">
           <t-input-number v-model="formData.daily_quota" :min="0" />
         </t-form-item>
-        <t-form-item label="每月配额" name="monthly_quota">
+        <t-form-item :label="t('每月配额')" name="monthly_quota">
           <t-input-number v-model="formData.monthly_quota" :min="0" />
         </t-form-item>
-        <t-form-item label="关联号池" name="gptcar_list">
-          <t-select v-model="formData.gptcar_list" multiple placeholder="请选择号池">
+        <t-form-item :label="t('关联号池')" name="gptcar_list">
+          <t-select v-model="formData.gptcar_list" multiple :placeholder="t('请选择号池')">
             <t-option v-for="car in carOptions" :key="car.id" :value="car.id" :label="car.car_name" />
           </t-select>
         </t-form-item>
-        <t-form-item label="备注" name="remark">
-          <t-textarea v-model="formData.remark" placeholder="请输入备注" />
+        <t-form-item :label="t('备注')" name="remark">
+          <t-textarea v-model="formData.remark" :placeholder="t('请输入备注')" />
         </t-form-item>
       </t-form>
     </t-dialog>
 
     <t-dialog
       :visible="modelDialogVisible"
-      :header="`${modelUser.username || ''} 的普通模型与频率`"
+      :header="t('{0} 的普通模型与频率', [modelUser.username || ''])"
       :confirm-btn="{ loading: modelSaving, disabled: !modelAccountId }"
       width="1120px"
       @confirm="saveModelPolicy"
@@ -177,13 +205,13 @@
     >
       <div class="capability-toolbar">
         <div>
-          <div class="capability-label">策略账号</div>
-          <div class="form-help">模型清单由该绑定账号的官网接口实时返回；各周期从首次发送起计算，次数填 0 表示不限频。</div>
+          <div class="capability-label">{{ t('策略账号') }}</div>
+          <div class="form-help">{{ t('模型清单由该绑定账号的官网接口实时返回；各周期从首次发送起计算，次数填 0 表示不限频。') }}</div>
         </div>
         <t-select
           v-model="modelAccountId"
           :loading="modelLoading"
-          placeholder="请选择一个绑定账号"
+          :placeholder="t('请选择一个绑定账号')"
           @change="loadModelPolicy"
         >
           <t-option
@@ -197,7 +225,7 @@
       <t-alert
         v-if="modelAccountId && !modelInitialized"
         theme="info"
-        message="首次配置时当前普通模型默认全部开启；以后官网新增模型默认关闭。Work 模型不受此策略影响。"
+        :message="t('首次配置时当前普通模型默认全部开启；以后官网新增模型默认关闭。Work 模型不受此策略影响。')"
       />
       <t-loading :loading="modelLoading">
         <div v-if="modelItems.length" class="model-policy-list">
@@ -210,46 +238,46 @@
             </t-checkbox>
             <div class="model-rate-fields">
               <label class="model-limit-field">
-                <span>每</span>
+                <span>{{ t('每') }}</span>
                 <t-input v-model="item.hour_window_hours" type="number" :min="1" :max="8760" :disabled="!item.enabled" />
-                <span>小时</span>
+                <span>{{ t('小时') }}</span>
                 <t-input v-model="item.hour_limit" type="number" :min="0" :max="100000" :disabled="!item.enabled" />
-                <span>次</span>
+                <span>{{ t('次') }}</span>
               </label>
               <label class="model-limit-field">
-                <span>每周</span>
+                <span>{{ t('每周') }}</span>
                 <t-input v-model="item.week_limit" type="number" :min="0" :max="100000" :disabled="!item.enabled" />
-                <span>次</span>
+                <span>{{ t('次') }}</span>
               </label>
               <label class="model-limit-field">
-                <span>每月</span>
+                <span>{{ t('每月') }}</span>
                 <t-input v-model="item.month_limit" type="number" :min="0" :max="100000" :disabled="!item.enabled" />
-                <span>次</span>
+                <span>{{ t('次') }}</span>
               </label>
             </div>
           </div>
         </div>
-        <t-empty v-else description="此账号没有可配置的普通模型" />
+        <t-empty v-else :description="t('此账号没有可配置的普通模型')" />
       </t-loading>
     </t-dialog>
 
     <t-dialog
       :visible="capabilityDialogVisible"
-      :header="`${capabilityUser.username || ''} 的 MCP & Skills`"
-      :confirm-btn="{ loading: capabilitySaving, disabled: !capabilityAccountId }"
+      :header="t('{0} 的 MCP &amp; Skills', [capabilityUser.username || ''])"
+      :confirm-btn="{ loading: capabilitySaving, disabled: !capabilityAccountId || capabilityLoading || !capabilityLoaded }"
       width="820px"
       @confirm="saveCapabilities"
       @close="capabilityDialogVisible = false"
     >
       <div class="capability-toolbar">
         <div>
-          <div class="capability-label">清单来源账号</div>
-          <div class="form-help">必须由管理员指定。首次配置时，当前已有项目默认全部开启。</div>
+          <div class="capability-label">{{ t('清单来源账号') }}</div>
+          <div class="form-help">{{ t('必须由管理员指定。首次配置时，当前已有项目默认全部开启。') }}</div>
         </div>
         <t-select
           v-model="capabilityAccountId"
           :loading="capabilityLoading"
-          placeholder="请选择一个绑定账号"
+          :placeholder="t('请选择一个绑定账号')"
           @change="loadCapabilities"
         >
           <t-option
@@ -263,11 +291,15 @@
       <t-alert
         v-if="capabilityAccountId && !capabilityInitialized"
         theme="info"
-        message="当前清单默认全部开启；以后新发现的 MCP 或 Skill 默认关闭。"
+        :message="t('当前清单默认全部开启；以后新发现的 MCP 或 Skill 默认关闭。')"
       />
+      <t-alert v-if="capabilityErrors.length" theme="warning" :message="capabilityErrors.join('；')" />
       <t-loading :loading="capabilityLoading">
-        <t-tabs v-model="capabilityTab" class="capability-tabs">
-          <t-tab-panel value="mcp" :label="`MCP (${capabilityMcp.length})`">
+        <PanelTabs v-model="capabilityTab" class="capability-tabs" label="MCP &amp; Skills" :items="[
+          { value: 'mcp', label: `MCP (${capabilityMcp.length})` },
+          { value: 'skills', label: `Skills (${capabilitySkills.length})` },
+        ]">
+          <template #mcp>
             <t-checkbox-group v-if="capabilityMcp.length" v-model="selectedMcpIds" class="capability-list">
               <t-checkbox v-for="item in capabilityMcp" :key="item.id" :value="item.id">
                 <span class="capability-item">
@@ -276,9 +308,9 @@
                 </span>
               </t-checkbox>
             </t-checkbox-group>
-            <t-empty v-else description="此账号没有可配置的 MCP / 插件" />
-          </t-tab-panel>
-          <t-tab-panel value="skills" :label="`Skills (${capabilitySkills.length})`">
+            <t-empty v-else :description="capabilityMcpComplete ? t('此账号没有可配置的 MCP / 插件') : t('MCP 清单暂未完整读取')" />
+          </template>
+          <template #skills>
             <t-checkbox-group v-if="capabilitySkills.length" v-model="selectedSkillIds" class="capability-list">
               <t-checkbox v-for="item in capabilitySkills" :key="item.id" :value="item.id">
                 <span class="capability-item">
@@ -287,15 +319,15 @@
                 </span>
               </t-checkbox>
             </t-checkbox-group>
-            <t-empty v-else description="此账号没有可配置的 Skills" />
-          </t-tab-panel>
-        </t-tabs>
+            <t-empty v-else :description="capabilitySkillsComplete ? t('此账号没有可配置的 Skills') : t('Skills 清单暂未完整读取')" />
+          </template>
+        </PanelTabs>
       </t-loading>
     </t-dialog>
 
     <t-dialog
       :visible="statisticsDialogVisible"
-      :header="`${statisticsUser.username || ''} 的对话统计`"
+      :header="t('{0} 的对话统计', [statisticsUser.username || ''])"
       :confirm-btn="null"
       width="860px"
       @close="statisticsDialogVisible = false"
@@ -303,44 +335,44 @@
       <t-loading :loading="statisticsLoading">
         <div class="statistics-summary">
           <div class="statistics-card">
-            <span>创建对话</span>
-            <strong>{{ statisticsData.conversation_count }} 条</strong>
+            <span>{{ t('创建对话') }}</span>
+            <strong>{{ statisticsData.conversation_count }} {{ t('条') }}</strong>
           </div>
           <div class="statistics-card">
-            <span>发送消息</span>
-            <strong>{{ statisticsData.message_count }} 条</strong>
+            <span>{{ t('发送消息') }}</span>
+            <strong>{{ statisticsData.message_count }} {{ t('条') }}</strong>
           </div>
         </div>
 
         <div class="statistics-section">
-          <div class="statistics-section__title">模型消息数</div>
+          <div class="statistics-section__title">{{ t('模型消息数') }}</div>
           <t-space v-if="modelStatisticsRows.length" break-line>
             <t-tag v-for="item in modelStatisticsRows" :key="item.model" variant="light">
-              {{ item.model }}：{{ item.count }} 条
+              {{ item.model }}：{{ item.count }} {{ t('条') }}
             </t-tag>
           </t-space>
-          <t-empty v-else description="暂无模型消息统计" />
+          <t-empty v-else :description="t('暂无模型消息统计')" />
         </div>
 
         <div class="statistics-section">
           <div class="statistics-section__head">
-            <div class="statistics-section__title">对话列表</div>
-            <t-popconfirm content="确定重置该用户的全部对话统计吗？不会删除实际对话。" @confirm="resetStatistics">
-              <t-button size="small" theme="warning" variant="outline">重置统计</t-button>
+            <div class="statistics-section__title">{{ t('对话列表') }}</div>
+            <t-popconfirm :content="t('确定重置该用户的全部对话统计吗？不会删除实际对话。')" @confirm="resetStatistics">
+              <t-button size="small" theme="warning" variant="outline">{{ t('重置统计') }}</t-button>
             </t-popconfirm>
           </div>
           <t-alert
             v-if="!statisticsData.title_visible"
             theme="info"
-            message="该用户未允许管理员查看对话标题，以下仅显示官网对话路径中的 UUID。"
+            :message="t('该用户未允许管理员查看对话标题，以下仅显示官网对话路径中的 UUID。')"
           />
           <div v-if="statisticsData.conversations.length" class="conversation-stat-list">
             <div v-for="item in statisticsData.conversations" :key="item.conversation_id" class="conversation-stat-row">
               <div class="conversation-stat-title">{{ item.display_title }}</div>
-              <div class="conversation-stat-meta">{{ item.message_count }} 条消息</div>
+              <div class="conversation-stat-meta">{{ item.message_count }} {{ t('条消息') }}</div>
             </div>
           </div>
-          <t-empty v-else description="暂无对话统计" />
+          <t-empty v-else :description="t('暂无对话统计')" />
         </div>
       </t-loading>
     </t-dialog>
@@ -351,6 +383,10 @@
 import { computed, ref, reactive, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import PanelTabs from '@/components/PanelTabs.vue'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t, labels } = useWorkspaceCopy()
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -374,6 +410,10 @@ const capabilitySkills = ref<any[]>([])
 const selectedMcpIds = ref<string[]>([])
 const selectedSkillIds = ref<string[]>([])
 const capabilityInitialized = ref(false)
+const capabilityLoaded = ref(false)
+const capabilityErrors = ref<string[]>([])
+const capabilityMcpComplete = ref(true)
+const capabilitySkillsComplete = ref(true)
 const capabilityUser = reactive({ id: 0, username: '' })
 const modelDialogVisible = ref(false)
 const modelLoading = ref(false)
@@ -423,6 +463,7 @@ const columns = [
   { colKey: 'id', title: 'ID', width: 80 },
   { colKey: 'username', title: '用户名' },
   { colKey: 'is_active', title: '状态', cell: 'is_active', width: 80 },
+  { colKey: 'allow_multiple_sessions', title: '登录会话', cell: 'allow_multiple_sessions', width: 100 },
   { colKey: 'model_limit', title: '普通模型', cell: 'model_limit', width: 110 },
   { colKey: 'force_chat_mode', title: 'Work 模式', cell: 'force_chat_mode', width: 110 },
   { colKey: 'expired_date', title: '过期日期', cell: 'expired_date', width: 120 },
@@ -438,6 +479,8 @@ const formData = reactive({
   username: '',
   password: '',
   is_active: true,
+  is_admin: false,
+  allow_multiple_sessions: false,
   isolated_session: true,
   mcp_isolation: true,
   skills_isolation: true,
@@ -504,6 +547,8 @@ const showAddDialog = () => {
     username: '',
     password: '',
     is_active: true,
+    is_admin: false,
+    allow_multiple_sessions: false,
     isolated_session: true,
     mcp_isolation: true,
     skills_isolation: true,
@@ -529,6 +574,8 @@ const showEditDialog = (row: any) => {
     username: row.username,
     password: '',
     is_active: row.is_active,
+    is_admin: row.is_admin === true,
+    allow_multiple_sessions: row.is_admin !== true && row.allow_multiple_sessions === true,
     isolated_session: row.isolated_session ?? true,
     mcp_isolation: row.mcp_isolation ?? true,
     skills_isolation: row.skills_isolation ?? true,
@@ -557,6 +604,7 @@ const handleSubmit = async () => {
   const payload = {
     username: formData.username,
     is_active: formData.is_active,
+    allow_multiple_sessions: !formData.is_admin && formData.allow_multiple_sessions,
     isolated_session: formData.isolated_session,
     mcp_isolation: formData.mcp_isolation,
     skills_isolation: formData.skills_isolation,
@@ -581,7 +629,7 @@ const handleSubmit = async () => {
   submitLoading.value = false
 
   if (data) {
-    MessagePlugin.success(isEdit.value ? '更新成功' : '添加成功')
+    MessagePlugin.success(isEdit.value ? t('更新成功') : t('添加成功'))
     dialogVisible.value = false
     fetchData()
   }
@@ -590,7 +638,7 @@ const handleSubmit = async () => {
 const handleDelete = async (row: any) => {
   const data = await request('/0x/user', 'DELETE', { username: row.username })
   if (data) {
-    MessagePlugin.success('删除成功')
+    MessagePlugin.success(t('删除成功'))
     fetchData()
   }
 }
@@ -601,7 +649,7 @@ const handleRevokeSessions = async (row: any) => {
   try {
     const data = await request('/0x/user/revoke-sessions', 'POST', { user_id: row.id })
     if (data) {
-      MessagePlugin.success(data.message || '会话已撤销，用户将返回登录页面')
+      MessagePlugin.success(data.message || t('会话已撤销，用户将返回登录页面'))
     }
   } finally {
     revokingUserId.value = null
@@ -615,10 +663,18 @@ const applyCapabilityData = (data: any) => {
   selectedMcpIds.value = capabilityMcp.value.filter(item => item.enabled).map(item => item.id)
   selectedSkillIds.value = capabilitySkills.value.filter(item => item.enabled).map(item => item.id)
   capabilityInitialized.value = Boolean(data?.initialized)
+  capabilityErrors.value = Array.isArray(data?.discovery_errors) ? data.discovery_errors : []
+  capabilityMcpComplete.value = data?.mcp_complete !== false
+  capabilitySkillsComplete.value = data?.skills_complete !== false
+  capabilityLoaded.value = true
 }
 
 const loadCapabilities = async () => {
   if (!capabilityAccountId.value) return
+  capabilityLoaded.value = false
+  capabilityMcp.value = []
+  capabilitySkills.value = []
+  capabilityErrors.value = []
   capabilityLoading.value = true
   try {
     const data = await request(
@@ -661,7 +717,7 @@ const saveCapabilities = async () => {
       skills_allowed_ids: selectedSkillIds.value,
     })
     if (data) {
-      MessagePlugin.success(data.message || 'MCP 与 Skills 权限已保存')
+      MessagePlugin.success(data.message || t('MCP 与 Skills 权限已保存'))
       capabilityDialogVisible.value = false
     }
   } finally {
@@ -732,7 +788,7 @@ const saveModelPolicy = async () => {
       ),
     })
     if (data) {
-      MessagePlugin.success(data.message || '普通模型权限与频率限制已保存')
+      MessagePlugin.success(data.message || t('普通模型权限与频率限制已保存'))
       modelDialogVisible.value = false
       await fetchData()
     }
@@ -768,7 +824,7 @@ const resetStatistics = async () => {
     'DELETE',
   )
   if (data) {
-    MessagePlugin.success(data.message || '对话统计已重置')
+    MessagePlugin.success(data.message || t('对话统计已重置'))
     await loadStatistics()
     await fetchData()
   }
@@ -800,6 +856,25 @@ const batchAction = async (action: 'activate' | 'deactivate') => {
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.library-settings {
+  width: 100%;
+}
+
+.library-settings__status,
+.library-settings__visibility {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.library-settings__visibility {
+  margin-top: 12px;
+  padding-left: 12px;
+  border-left: 2px solid var(--app-border);
+  color: var(--app-text);
+  font-size: 13px;
 }
 
 .statistics-summary {

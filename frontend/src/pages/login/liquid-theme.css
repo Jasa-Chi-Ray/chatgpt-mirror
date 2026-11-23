@@ -1,0 +1,64 @@
+.login-liquid-surface {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+:root:not([data-login-liquid]) .login-liquid-surface {
+  visibility: hidden;
+}
+
+:root[data-login-liquid] .login-liquid-surface {
+  view-transition-name: login-liquid-edge;
+}
+
+:root[data-login-liquid]::view-transition {
+  pointer-events: none;
+}
+
+:root[data-login-liquid]::view-transition-group(root) {
+  animation: login-liquid-hold 3s linear both;
+}
+
+:root[data-login-liquid]::view-transition-old(root),
+:root[data-login-liquid]::view-transition-new(root),
+:root[data-login-liquid]::view-transition-group(login-liquid-edge),
+:root[data-login-liquid]::view-transition-old(login-liquid-edge),
+:root[data-login-liquid]::view-transition-new(login-liquid-edge) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+:root[data-login-liquid='dark']::view-transition-new(root),
+:root[data-login-liquid='light']::view-transition-old(root) {
+  clip-path: var(--liquid-mask);
+}
+
+:root[data-login-liquid='light']::view-transition-old(root) {
+  z-index: 1;
+}
+
+:root[data-login-liquid]::view-transition-group(login-liquid-edge) {
+  z-index: 2;
+}
+
+:root[data-login-liquid]:not([data-login-liquid-glass])::view-transition-group(login-liquid-edge) {
+  background: rgb(225 248 233 / 52%);
+  backdrop-filter: blur(3px) brightness(1.08);
+  clip-path: var(--liquid-fallback-shape);
+}
+
+:root[data-login-liquid]:has(:is(.login-page, .session-page, .account-layout--profile))::view-transition-group(login-liquid-edge) {
+  filter: grayscale(1);
+}
+
+:root[data-login-liquid]:has(:is(.login-page, .session-page, .account-layout--profile)):not([data-login-liquid-glass])::view-transition-group(login-liquid-edge) {
+  background: rgb(240 240 240 / 52%);
+}
+
+@keyframes login-liquid-hold {
+  from, to { opacity: 1; }
+}

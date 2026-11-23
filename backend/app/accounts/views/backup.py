@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 
 from app.permissions import IsSuperUser
 
-from app.accounts.models import Announcement, User, VisitLog
+from app.accounts.models import Announcement, User, VisitLog, LoginSession
 from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.fields import decrypt_value, encrypt_value
 from app.utils import req_gateway
@@ -82,6 +82,7 @@ def _export_django_data():
                 "date_joined": _iso(user.date_joined),
                 "remark": user.remark,
                 "isolated_session": user.isolated_session,
+                "allow_multiple_sessions": user.allow_multiple_sessions,
                 "mcp_isolation": user.mcp_isolation,
                 "skills_isolation": user.skills_isolation,
                 "model_isolation": user.model_isolation,
@@ -170,6 +171,10 @@ def _export_django_data():
                 "created": _iso(token.created),
             }
             for token in Token.objects.select_related("user").order_by("key")
+        ],
+        "login_sessions": [
+            {"key": token.key, "username": token.user.username, "created": _iso(token.created)}
+            for token in LoginSession.objects.select_related("user").order_by("key")
         ],
         "sessions": [
             {
@@ -275,6 +280,7 @@ def _restore_complete_django(payload):
         LogEntry.objects.all().delete()
         Announcement.objects.all().delete()
         Token.objects.all().delete()
+        LoginSession.objects.all().delete()
         Session.objects.all().delete()
         VisitLog.objects.all().delete()
         User.objects.all().delete()
@@ -340,6 +346,15 @@ def _restore_complete_django(payload):
             created = _parse_datetime(data.pop("created", None), fallback=timezone.now())
             token = Token.objects.create(**data)
             Token.objects.filter(pk=token.pk).update(created=created)
+        for raw in payload.get("login_sessions", []):
+            data = dict(raw)
+            username = data.pop("username")
+            if username not in users or not users[username].can_use_multiple_sessions:
+                raise ValidationError({"archive": "多会话令牌的用户不存在或未开启多会话"})
+            data["user"] = users[username]
+            created = _parse_datetime(data.pop("created", None), fallback=timezone.now())
+            token = LoginSession.objects.create(**data)
+            LoginSession.objects.filter(pk=token.pk).update(created=created)
         for raw in payload["sessions"]:
             data = dict(raw)
             data["expire_date"] = _parse_datetime(data.get("expire_date"))

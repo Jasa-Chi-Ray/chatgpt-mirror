@@ -1,0 +1,200 @@
+.workspace-page { min-width: 0; }
+.workspace-page .t-card { border-radius: 14px; }
+.workspace-page .t-card__actions { min-width: 0; }
+.workspace-page .t-card__actions .t-space,
+.workspace-page :is(.table-toolbar,.account-toolbar,.log-toolbar,.overview-actions,.detail-actions,.transport-control) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+.workspace-content .workspace-page :is(.table-toolbar,.account-toolbar,.log-toolbar) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px;
+  margin-bottom: 16px;
+  background: var(--app-field);
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+}
+.workspace-content .workspace-page :is(.table-toolbar,.account-toolbar,.log-toolbar) > :is(.t-input__wrap,.t-select__wrap) {
+  min-width: min(100%, 168px);
+  flex: 1 1 168px;
+  max-width: 300px;
+}
+.workspace-page .t-table {
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.workspace-page .t-table .t-table__content { overflow-x: auto; }
+.workspace-page :is(.status-title,.privacy-title,.trusted-cdn-title,.editor-pane-title,.capability-label) {
+  color: var(--app-text);
+  font-weight: 640;
+}
+.workspace-page :is(.status-description,.privacy-desc,.trusted-cdn-desc,.form-help,.field-help) {
+  color: var(--app-text-muted);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.workspace-page :is(.rule-scroll,.trusted-cdn-panel,.empty,.announcement-preview) { min-width: 0; }
+.workspace-page :is(.status-row,.security-status,.privacy-row) {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.workspace-page :is(.status-row,.security-status,.privacy-row) > .t-switch { flex: 0 0 auto; }
+.workspace-page :is(.rule-details,.trusted-cdn-panel,.script-row,.node-row,.announcement-editor__preview) {
+  background: var(--app-field);
+  border-color: var(--app-border);
+}
+.workspace-page :is(.script-title,.node-title,.node-actions,.script-meta) { min-width: 0; flex-wrap: wrap; }
+.workspace-page :is(.t-select__wrap,.t-input__wrap,.t-textarea) { min-width: 0; }
+.workspace-page :is(.t-tabs__nav-item.t-is-active,.t-tabs__nav-item:hover) { color: var(--app-action); }
+.workspace-page :is(.t-tabs__nav,.t-tabs__nav-item) { background: var(--app-surface); }
+.workspace-page .t-tag { max-width: 100%; }
+
+.overview-page .overview-actions { justify-content: end; margin-bottom: 16px; }
+.overview-page .metric-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 165px),1fr)); }
+.overview-page .metric-card {
+  background: var(--app-field);
+  border-top: 2px solid var(--app-action) !important;
+}
+.overview-page .metric-label { color: var(--app-text-muted); }
+.overview-page .metric-value { color: var(--app-action); font-variant-numeric: tabular-nums; }
+.overview-page .metric-detail { color: var(--app-text-muted); overflow-wrap: anywhere; }
+
+:root:is([data-profile-workspace], :has(.account-layout--profile.opening-source-leaving))[theme-mode='light'] {
+  --app-bg: #efefef;
+  --app-surface: #fdfdfd;
+  --app-surface-muted: #e8e8e8;
+  --app-field: #f6f6f6;
+  --app-text: #202020;
+  --app-text-muted: #555;
+  --app-border: #cdcdcd;
+  --app-border-strong: #828282;
+  --app-action: #353535;
+  --app-action-hover: #202020;
+  --app-action-pressed: #171717;
+  --app-on-action: #fdfdfd;
+  --app-hero: #252525;
+  --app-nav-text: #e4e4e4;
+  --app-success: #414141;
+  --app-shadow: rgb(0 0 0 / 11%);
+  --profile-hatch-ink: rgb(32 32 32 / 7%);
+  --profile-border-echo: rgb(32 32 32 / 21%);
+}
+
+:root:is([data-profile-workspace], :has(.account-layout--profile.opening-source-leaving))[theme-mode='dark'] {
+  --app-bg: #111;
+  --app-surface: #191919;
+  --app-surface-muted: #323232;
+  --app-field: #222;
+  --app-text: #f1f1f1;
+  --app-text-muted: #b6b6b6;
+  --app-border: #454545;
+  --app-border-strong: #909090;
+  --app-action: #dedede;
+  --app-action-hover: #f1f1f1;
+  --app-action-pressed: #bcbcbc;
+  --app-on-action: #191919;
+  --app-hero: #242424;
+  --app-nav-text: #dedede;
+  --app-success: #d0d0d0;
+  --profile-hatch-ink: rgb(235 235 235 / 8%);
+  --profile-border-echo: rgb(235 235 235 / 24%);
+}
+
+:root:is([data-profile-workspace], :has(.account-layout--profile.opening-source-leaving)) {
+  --td-success-color: var(--app-success);
+  --td-bg-color-component: var(--app-border);
+  --profile-hatch: repeating-linear-gradient(29deg, transparent 0 8px, var(--profile-hatch-ink) 8px 9px, transparent 9px 12px);
+}
+
+.account-layout.account-layout--profile .account-frame {
+  overflow: clip;
+  background: var(--app-hero);
+}
+
+.account-layout.account-layout--profile .account-sidebar {
+  background-image: repeating-linear-gradient(29deg, transparent 0 8px, rgb(255 255 255 / 9%) 8px 9px, transparent 9px 12px);
+}
+
+.account-layout.account-layout--profile .account-nav-link.is-active {
+  color: #f3f3f3;
+  border-color: rgb(255 255 255 / 40%);
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 8%);
+}
+
+.account-layout.account-layout--profile .account-nav-link:focus-visible { outline-color: #eee; }
+
+.account-layout--profile .workspace-header,
+.account-layout--profile .profile-page .t-card__header {
+  background: var(--app-field) var(--profile-hatch);
+}
+
+.account-layout--profile .profile-page .t-card__header { border-bottom-color: var(--app-border); }
+
+.account-layout--profile .profile-page .t-button--theme-primary.t-button--variant-base {
+  position: relative;
+  color: var(--app-text);
+  background: var(--app-field);
+  border-color: var(--app-action);
+}
+
+.account-layout--profile .profile-page .t-button--theme-primary.t-button--variant-base:not(:disabled):hover {
+  background: var(--app-surface-muted);
+}
+
+.account-layout--profile .profile-page .t-button--theme-primary.t-button--variant-base::before {
+  position: absolute;
+  inset: 2px 3px 3px 2px;
+  border: 1px solid var(--profile-border-echo);
+  border-radius: 5px;
+  pointer-events: none;
+  content: "";
+}
+
+.account-layout--profile .quota-row .t-progress__bar {
+  background-color: var(--app-field);
+  box-shadow: inset 0 0 0 1px var(--app-border);
+}
+
+.account-layout--profile .quota-row .t-progress__inner {
+  background: var(--app-action) repeating-linear-gradient(-27deg, transparent 0 4px, rgb(128 128 128 / 35%) 4px 5px, transparent 5px 7px);
+}
+
+.account-layout--profile .profile-page .t-switch:not(.t-is-checked, .t-is-loading) {
+  background-color: var(--app-field);
+  box-shadow: inset 0 0 0 1px var(--app-border-strong);
+}
+
+.account-layout--profile .profile-page .t-switch__handle::before { background-color: var(--app-text-muted); }
+.account-layout--profile .profile-page .t-switch.t-is-checked .t-switch__handle::before { background-color: var(--app-surface); }
+
+.profile-page { grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); }
+.profile-page .t-card:last-child { grid-column: 1 / -1; }
+.profile-page .quota-head { color: var(--app-text); gap: 8px; }
+.profile-page .quota-head > span:last-child { color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+
+.settings-page > .t-card + .t-card { margin-top: 18px; }
+.settings-page :is(.transport-help,.field-help,.trusted-cdn-desc) code { overflow-wrap: anywhere; }
+
+@media (max-width: 620px) {
+  .workspace-page .t-card__header { align-items: flex-start; }
+  .workspace-page .t-card__actions { max-width: 100%; }
+  .workspace-page .t-card__actions .t-space { gap: 7px; }
+  .workspace-content .workspace-page :is(.table-toolbar,.account-toolbar,.log-toolbar) { gap: 7px; padding: 8px; }
+  .workspace-content .workspace-page :is(.table-toolbar,.account-toolbar,.log-toolbar) > :is(.t-input__wrap,.t-select__wrap) {
+    flex: 1 1 132px;
+    min-width: min(100%, 132px);
+    max-width: 100%;
+  }
+  .workspace-page .t-form__item { flex-direction: column; align-items: stretch; }
+  .workspace-page .t-form__label { width: auto !important; min-width: 0; text-align: left; padding: 0 0 5px; }
+  .workspace-page .t-form__controls { min-width: 0; margin-left: 0 !important; }
+  .overview-page .overview-actions { justify-content: start; }
+}

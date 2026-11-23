@@ -105,6 +105,26 @@ class HealthMonitorTests(TestCase):
         self.addCleanup(patch.stopall)
         self.now = timezone.now()
 
+    @patch("app.utils.req_gateway", return_value={
+        "access_token_valid": False, "session_token_valid": False,
+        "user_info": {"email": "", "plan_type": None}, "last_error": "Token unavailable",
+    })
+    def test_failed_diagnostics_preserve_last_known_pro_subscription(self, gateway):
+        self.account.refresh_auth_diagnostics(force=True)
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.plan_type, "pro")
+        self.assertFalse(self.account.access_token_valid)
+
+    @patch("app.utils.req_gateway", return_value={
+        "access_token_valid": True, "session_token_valid": False,
+        "user_info": {"plan_type": "free"}, "last_error": "",
+    })
+    def test_confirmed_free_entitlement_replaces_previous_pro_subscription(self, gateway):
+        self.account.refresh_auth_diagnostics(force=True)
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.plan_type, "free")
+        self.assertTrue(self.account.access_token_valid)
+
     def tick(self, offset=0):
         with patch("app.chatgpt.health_monitor.timezone.now", return_value=self.now + timedelta(seconds=offset)):
             for job in due_checks():

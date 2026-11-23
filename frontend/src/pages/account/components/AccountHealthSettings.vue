@@ -1,57 +1,57 @@
 <template>
-  <t-button variant="outline" @click="open">定时健康检测</t-button>
-  <t-dialog v-model:visible="visible" header="定时健康检测与邮件通知" width="min(680px, 94vw)" placement="center"
-    :confirm-btn="{ content: '保存设置', loading: saving, disabled: loading || testing }" @confirm="save">
+  <t-button variant="outline" @click="open">{{ t('定时健康检测') }}</t-button>
+  <t-dialog v-model:visible="visible" :header="t('定时健康检测与邮件通知')" width="min(680px, 94vw)" placement="center"
+    :confirm-btn="{ content: t('保存设置'), loading: saving, disabled: loading || testing }" @confirm="save">
     <t-loading :loading="loading">
       <t-form label-width="110px" class="health-settings">
-        <t-form-item label="开启检测"><t-switch v-model="form.enabled" /></t-form-item>
-        <t-form-item label="检测间隔">
+        <t-form-item :label="t('开启检测')"><t-switch v-model="form.enabled" /></t-form-item>
+        <t-form-item :label="t('检测间隔')">
           <t-input-number v-model="form.interval_minutes" :min="2" :max="10080" :decimal-places="0" />
-          <span class="field-note">分钟（最短 2 分钟）</span>
+          <span class="field-note">{{ t('分钟（最短 2 分钟）') }}</span>
         </t-form-item>
-        <p class="help-text">首次异常后等待 18 秒复检，仍异常才通知。持续异常只通知一次，恢复后再次异常会重新通知；发信失败每 2 分钟重试。</p>
-        <t-form-item label="收件邮箱"><t-input v-model="form.recipient" placeholder="接收异常通知的邮箱" /></t-form-item>
-        <t-form-item label="收件测试">
-          <t-checkbox v-model="testOnChange">首次设置或更换收件邮箱时发送 test 邮件（可取消）</t-checkbox>
+        <p class="help-text">{{ t('首次异常后等待 18 秒复检，仍异常才通知。持续异常只通知一次，恢复后再次异常会重新通知；发信失败每 2 分钟重试。') }}</p>
+        <t-form-item :label="t('收件邮箱')"><t-input v-model="form.recipient" :placeholder="t('接收异常通知的邮箱')" /></t-form-item>
+        <t-form-item :label="t('收件测试')">
+          <t-checkbox v-model="testOnChange">{{ t('首次设置或更换收件邮箱时发送 test 邮件（可取消）') }}</t-checkbox>
         </t-form-item>
-        <t-divider>SMTP · 发送通知</t-divider>
-        <t-form-item label="邮箱服务商">
-          <t-select v-model="provider" :options="providerOptions" @change="applyProvider" />
+        <t-divider>{{ t('SMTP · 发送通知') }}</t-divider>
+        <t-form-item :label="t('邮箱服务商')">
+          <t-select v-model="provider" :options="labels(providerOptions)" @change="applyProvider" />
         </t-form-item>
-        <p class="help-text">QQ / 网易请使用客户端授权码，iCloud 请使用 App 专用密码。</p>
-        <t-form-item label="SMTP 服务器"><t-input v-model="form.smtp_host" placeholder="smtp.example.com" /></t-form-item>
-        <t-form-item label="连接方式">
+        <p class="help-text">{{ t('QQ / 网易请使用客户端授权码，iCloud 请使用 App 专用密码。') }}</p>
+        <t-form-item :label="t('SMTP 服务器')"><t-input v-model="form.smtp_host" placeholder="smtp.example.com" /></t-form-item>
+        <t-form-item :label="t('连接方式')">
           <t-space break-line>
-            <t-select v-model="form.smtp_security" :options="securityOptions" style="width: 150px" />
-            <t-input-number v-model="form.smtp_port" aria-label="SMTP 端口" :min="1" :max="65535" :decimal-places="0" />
+            <t-select v-model="form.smtp_security" :options="labels(securityOptions)" style="width: 150px" />
+            <t-input-number v-model="form.smtp_port" :aria-label="t('SMTP 端口')" :min="1" :max="65535" :decimal-places="0" />
           </t-space>
         </t-form-item>
-        <t-form-item label="发件邮箱"><t-input v-model="form.smtp_username" placeholder="同时作为 SMTP 登录用户名" /></t-form-item>
-        <t-form-item label="SMTP 授权码">
+        <t-form-item :label="t('发件邮箱')"><t-input v-model="form.smtp_username" :placeholder="t('同时作为 SMTP 登录用户名')" /></t-form-item>
+        <t-form-item :label="t('SMTP 授权码')">
           <input v-model="form.smtp_password" class="secret-input" type="password" autocomplete="new-password"
-            aria-label="SMTP 授权码" :placeholder="form.smtp_configured ? '已配置；留空保留，输入新值覆盖' : '填写邮箱授权码或应用密码'" />
+            :aria-label="t('SMTP 授权码')" :placeholder="form.smtp_configured ? t('已配置；留空保留，输入新值覆盖') : t('填写邮箱授权码或应用密码')" />
         </t-form-item>
         <t-collapse :default-value="[]">
-          <t-collapse-panel value="imap" header="IMAP 配置（可选，不影响 SMTP 发信）">
-            <t-form-item label="IMAP 服务器"><t-input v-model="form.imap_host" placeholder="imap.example.com" /></t-form-item>
-            <t-form-item label="连接方式">
+          <t-collapse-panel value="imap" :header="t('IMAP 配置（可选，不影响 SMTP 发信）')">
+            <t-form-item :label="t('IMAP 服务器')"><t-input v-model="form.imap_host" placeholder="imap.example.com" /></t-form-item>
+            <t-form-item :label="t('连接方式')">
               <t-space break-line>
-                <t-select v-model="form.imap_security" :options="securityOptions" style="width: 150px" />
-                <t-input-number v-model="form.imap_port" aria-label="IMAP 端口" :min="1" :max="65535" :decimal-places="0" />
+                <t-select v-model="form.imap_security" :options="labels(securityOptions)" style="width: 150px" />
+                <t-input-number v-model="form.imap_port" :aria-label="t('IMAP 端口')" :min="1" :max="65535" :decimal-places="0" />
               </t-space>
             </t-form-item>
-            <t-form-item label="IMAP 用户名"><t-input v-model="form.imap_username" placeholder="邮箱登录用户名" /></t-form-item>
-            <t-form-item label="IMAP 授权码">
+            <t-form-item :label="t('IMAP 用户名')"><t-input v-model="form.imap_username" :placeholder="t('邮箱登录用户名')" /></t-form-item>
+            <t-form-item :label="t('IMAP 授权码')">
               <input v-model="form.imap_password" class="secret-input" type="password" autocomplete="new-password"
-                aria-label="IMAP 授权码" :placeholder="form.imap_configured ? '已配置；留空保留，输入新值覆盖' : '填写邮箱授权码或应用密码'" />
+                :aria-label="t('IMAP 授权码')" :placeholder="form.imap_configured ? t('已配置；留空保留，输入新值覆盖') : t('填写邮箱授权码或应用密码')" />
             </t-form-item>
-            <t-button variant="outline" :loading="testing" :disabled="saving" @click="test('test_imap')">测试已保存的 IMAP 配置</t-button>
+            <t-button variant="outline" :loading="testing" :disabled="saving" @click="test('test_imap')">{{ t('测试已保存的 IMAP 配置') }}</t-button>
           </t-collapse-panel>
         </t-collapse>
-        <p class="help-text">授权码加密保存，保存后不回显。更换服务器、端口、连接方式或用户名时，需重新填写授权码。检测覆盖全部上游账号，至少一种登录凭据可用即视为正常。</p>
+        <p class="help-text">{{ t('授权码加密保存，保存后不回显。更换服务器、端口、连接方式或用户名时，需重新填写授权码。检测覆盖全部上游账号，至少一种登录凭据可用即视为正常。') }}</p>
         <t-space direction="vertical">
-          <t-button variant="outline" :loading="testing" :disabled="saving" @click="test('test_mail')">发送测试邮件（使用已保存配置）</t-button>
-          <span v-if="form.last_sent_at" class="help-text">最近发送：{{ new Date(form.last_sent_at).toLocaleString() }}</span>
+          <t-button variant="outline" :loading="testing" :disabled="saving" @click="test('test_mail')">{{ t('发送测试邮件（使用已保存配置）') }}</t-button>
+          <span v-if="form.last_sent_at" class="help-text">{{ t('最近发送：') }}{{ new Date(form.last_sent_at).toLocaleString() }}</span>
           <t-alert v-if="form.last_mail_error" theme="warning" :message="form.last_mail_error" />
         </t-space>
       </t-form>
@@ -63,6 +63,9 @@
 import { reactive, ref, watch } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t, labels } = useWorkspaceCopy()
 
 const visible = ref(false)
 const loading = ref(false)

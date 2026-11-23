@@ -11,7 +11,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from app.accounts.models import VisitorSession
+from app.accounts.models import LoginSession, VisitorSession
 
 AUTHORIZATION_SALT = "mirror.gateway-authorization.v1"
 
@@ -24,6 +24,7 @@ def policy_digest(user):
     return digest(json.dumps({
         "pools": user.gptcar_list, "models": user.model_limit,
         "isolation": user.isolated_session, "force_chat": user.force_chat_mode,
+        "allow_multiple_sessions": user.allow_multiple_sessions,
         "hide_chat_work_toggle": user.hide_chat_work_toggle, "hide_library": user.hide_library,
         "hide_suggestions": user.hide_suggestions,
         "mcp_isolation": user.mcp_isolation, "skills_isolation": user.skills_isolation,
@@ -93,6 +94,7 @@ def gateway_authorization(request):
         "user_id": request.user.pk,
         "subject": get_request_subject(request),
         "token_digest": digest(request.auth),
+        "session_type": "multi" if isinstance(request.auth, LoginSession) else "single",
         "policy_digest": policy_digest(request.user),
         "version": authorization_version(request.user, request.auth),
     }, salt=AUTHORIZATION_SALT)
@@ -101,9 +103,15 @@ def gateway_authorization(request):
 def authorization_details(value, subject):
     try:
         payload = signing.loads(value, salt=AUTHORIZATION_SALT, max_age=settings.API_TOKEN_TTL_SECONDS)
-        token = Token.objects.select_related("user").get(user_id=payload["user_id"])
+        multi = payload.get("session_type") == "multi"
+        if multi:
+            token = LoginSession.objects.select_related("user").get(
+                user_id=payload["user_id"], key_digest=payload["token_digest"],
+            )
+        else:
+            token = Token.objects.select_related("user").get(user_id=payload["user_id"])
         user = token.user
-        if (not user.is_active or
+        if ((multi and not user.can_use_multiple_sessions) or not user.is_active or
                 (user.expired_date and user.expired_date <= timezone.localdate()) or
                 token.created + timedelta(seconds=settings.API_TOKEN_TTL_SECONDS) <= timezone.now() or
                 not constant_time_compare(payload["token_digest"], digest(token.key)) or
@@ -125,8 +133,9 @@ def authorization_details(value, subject):
             expiry = min(expiry, visitor.expires_at)
         elif subject != user.username:
             return None
-        return {"active": True, "version": payload["version"], "expires_at": int(expiry.timestamp())}
-    except (signing.BadSignature, Token.DoesNotExist, KeyError, TypeError, ValueError):
+        return {"active": True, "version": payload["version"], "expires_at": int(expiry.timestamp()),
+                "login_session_id": digest(token.key) if user.can_use_multiple_sessions else ""}
+    except (signing.BadSignature, Token.DoesNotExist, LoginSession.DoesNotExist, KeyError, TypeError, ValueError):
         return None
 
 

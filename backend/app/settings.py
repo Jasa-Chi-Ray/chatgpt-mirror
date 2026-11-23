@@ -107,56 +107,21 @@ if not os.path.exists(BASE_DIR + "/static"):
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": True,
-    "formatters": {
-        "simple": {
-            "format": "[%(asctime)s] %(levelname)s [%(module)s|%(lineno)s] - %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
-        },
-    },
+    "formatters": {"access": {"()": "app.logging_utils.SafeFormatter", "format": "[%(asctime)s] %(message)s", "datefmt": "%Y-%m-%d %H:%M:%S"}},
     "handlers": {
-        "console": {"level": "INFO", "class": "logging.StreamHandler", "formatter": "simple"},
-        "default": {
-            "level": "INFO",
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "formatter": "simple",
-            "filename": BASE_DIR + "/logs/default.log",
-            "when": "midnight",
-            "interval": 1,
-            "backupCount": 7,
-        },
-        "cron": {
-            "level": "INFO",
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "formatter": "simple",
-            "filename": BASE_DIR + "/logs/cron.log",
-            "when": "midnight",
-            "interval": 1,
-            "backupCount": 7,
-        },
-        "errors": {
-            "level": "WARNING",
-            "class": "logging.handlers.TimedRotatingFileHandler",
-            "formatter": "simple",
-            "filename": BASE_DIR + "/logs/errors.log",
-            "when": "midnight",
-            "interval": 1,
-            "backupCount": 7,
-        },
+        "console": {"class": "logging.StreamHandler", "formatter": "access"},
+        "file": {"class": "logging.handlers.TimedRotatingFileHandler", "formatter": "access", "filename": BASE_DIR + "/logs/default.log", "when": "midnight", "backupCount": 7},
+        "null": {"class": "logging.NullHandler"},
     },
     "loggers": {
-        "django": {
-            "handlers": ["console", "errors"],
-            "propagate": "ERROR",
-            "level": "INFO",
-        },
-        "cron":{
-            "handlers": ["console", "cron", "errors"],
-            "level": "INFO",
-        },
-        "default": {
-            "handlers": ["console", "default", "errors"],
-            "level": "INFO",
-        },
+        "access": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+        "django": {"handlers": ["null"], "level": "CRITICAL", "propagate": False},
+        "django.server": {"handlers": ["null"], "level": "CRITICAL", "propagate": False},
+        "django.request": {"handlers": ["null"], "level": "CRITICAL", "propagate": False},
+        "django.db.backends": {"handlers": ["null"], "level": "CRITICAL", "propagate": False},
+        "django.security": {"handlers": ["null"], "level": "CRITICAL", "propagate": False},
+        "cron": {"handlers": ["null"], "propagate": False},
+        "default": {"handlers": ["null"], "propagate": False},
     },
 }
 
@@ -191,6 +156,8 @@ STATICFILES_DIRS = [
 ]
 
 MIDDLEWARE = [
+    "app.logging_utils.AccessLogMiddleware",
+    "app.accounts.login_guard.LoginGuardMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "app.security.NoStoreApiMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -202,6 +169,11 @@ MIDDLEWARE = [
 ]
 
 REST_FRAMEWORK = {
+    "DEFAULT_PARSER_CLASSES": [
+        "app.request_parsers.AccessJSONParser",
+        "app.request_parsers.AccessFormParser",
+        "app.request_parsers.AccessMultiPartParser",
+    ],
     "PAGE_SIZE": 10,
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
@@ -212,10 +184,10 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "login_ip": "20/min",
+        "login_fingerprint": "20/min",
         "login_confirm": "20/min",
         "login_bootstrap": "60/min",
-        "login_account": "10/min",
+        "login_account_fingerprint": "10/min",
         "expensive_user": "30/min",
         "user": "120/min",
     },
@@ -308,11 +280,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 if DJANGO_ENV == "PRODUCTION":
     # 生产环境
-    print("PRODUCTION environment")
     from app.config.production import *
 
 
 else:  # if DJANGO_ENV == "LOCAL":
     # 本地开发 环境
-    print("local environment")
     from app.config.local import *

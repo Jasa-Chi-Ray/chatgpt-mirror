@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from app.accounts.models import User, VisitLog, PendingLogin, VisitorSession
+from app.accounts.models import User, VisitLog, PendingLogin, VisitorSession, LoginSession
 from app.accounts.session_authority import (
     gateway_authorization, capability_aliases, account_model_policies_by_username,
 )
@@ -29,6 +29,7 @@ from app.accounts.views.login import issue_user_token
 
 def revoke_user_sessions(user, *, require_gateway=False):
     Token.objects.filter(user=user).delete()
+    LoginSession.objects.filter(user=user).delete()
     PendingLogin.objects.filter(user=user).delete()
     VisitorSession.objects.filter(user=user).delete()
     from app.accounts.models import GatewayRevocation
@@ -267,6 +268,9 @@ class UserAccountView(generics.ListCreateAPIView):
                 raise ValidationError({"password": "新增用户必须设置密码"})
             user = User(username=data["username"])
 
+        if data.get("allow_multiple_sessions") and (user.is_staff or user.is_superuser):
+            raise ValidationError({"allow_multiple_sessions": "管理员始终只能使用单会话"})
+
         if data.get("password"):
             user.set_password(data["password"])
 
@@ -277,6 +281,8 @@ class UserAccountView(generics.ListCreateAPIView):
         user.is_active = data["is_active"]
         user.model_limit = data["model_limit"]
         user.isolated_session = data["isolated_session"]
+        if "allow_multiple_sessions" in data:
+            user.allow_multiple_sessions = data["allow_multiple_sessions"]
         user.mcp_isolation = data.get("mcp_isolation", True)
         user.skills_isolation = data.get("skills_isolation", True)
         user.model_isolation = data.get("model_isolation", True)
@@ -322,7 +328,7 @@ def _user_capability_account(user, account_id):
     return account
 
 
-def _capability_grants(items, selected_ids):
+def _capability_grants(items, selected_ids, *, previous=(), preserve_unseen=False):
     selected = {str(item).strip() for item in selected_ids if str(item).strip()}
     grants = []
     for item in items:
@@ -337,6 +343,11 @@ def _capability_grants(items, selected_ids):
             if value and value != item_id and value not in aliases:
                 aliases.append(value)
         grants.append({"id": item_id, "aliases": aliases[:12]})
+    if preserve_unseen:
+        observed = {str(value).casefold() for item in items for value in [item.get("id"), *(item.get("aliases") or [])] if value}
+        for grant in previous:
+            if isinstance(grant, dict) and not observed.intersection(str(value).casefold() for value in [grant.get("id"), *(grant.get("aliases") or [])] if value):
+                grants.append(grant)
     return grants
 
 
@@ -368,6 +379,9 @@ class UserCapabilityPolicyView(APIView):
         return {
             "mcp": [item for item in result.get("mcp", []) if isinstance(item, dict)],
             "skills": [item for item in result.get("skills", []) if isinstance(item, dict)],
+            "mcp_complete": result.get("mcp_complete", True) is True,
+            "skills_complete": result.get("skills_complete", True) is True,
+            "discovery_errors": [str(error) for error in result.get("discovery_errors", [])],
         }
 
     def get(self, request, user_id):
@@ -389,12 +403,14 @@ class UserCapabilityPolicyView(APIView):
         account = _user_capability_account(user, account_id)
         inventory = self._discover(user, account)
         reset_defaults = not user.capability_policy_initialized or user.capability_account_id != account.id
-        mcp_allowed = {item.get("id") for item in user.mcp_allowlist if isinstance(item, dict)}
-        skills_allowed = {item.get("id") for item in user.skills_allowlist if isinstance(item, dict)}
+        def aliases(items):
+            return {str(value).casefold() for item in items if isinstance(item, dict) for value in [item.get("id"), *(item.get("aliases") or [])] if value}
+        mcp_allowed = aliases(user.mcp_allowlist)
+        skills_allowed = aliases(user.skills_allowlist)
         for item in inventory["mcp"]:
-            item["enabled"] = reset_defaults or item.get("id") in mcp_allowed
+            item["enabled"] = reset_defaults or bool(aliases([item]) & mcp_allowed)
         for item in inventory["skills"]:
-            item["enabled"] = reset_defaults or item.get("id") in skills_allowed
+            item["enabled"] = reset_defaults or bool(aliases([item]) & skills_allowed)
         return Response({
             "accounts": accounts,
             "selected_account_id": account.id,
@@ -408,13 +424,18 @@ class UserCapabilityPolicyView(APIView):
         serializer.is_valid(raise_exception=True)
         account = _user_capability_account(user, serializer.validated_data["account_id"])
         inventory = self._discover(user, account)
+        if inventory["discovery_errors"] and not inventory["mcp"] and not inventory["skills"]:
+            raise ValidationError("能力清单读取失败，原有策略未修改。请查看读取提示后重试。")
+        preserve_existing = user.capability_account_id == account.id and user.capability_policy_initialized
         user.capability_account_id = account.id
         user.capability_policy_initialized = True
         user.mcp_allowlist = _capability_grants(
-            inventory["mcp"], serializer.validated_data["mcp_allowed_ids"]
+            inventory["mcp"], serializer.validated_data["mcp_allowed_ids"],
+            previous=user.mcp_allowlist, preserve_unseen=preserve_existing and not inventory["mcp_complete"]
         )
         user.skills_allowlist = _capability_grants(
-            inventory["skills"], serializer.validated_data["skills_allowed_ids"]
+            inventory["skills"], serializer.validated_data["skills_allowed_ids"],
+            previous=user.skills_allowlist, preserve_unseen=preserve_existing and not inventory["skills_complete"]
         )
         user.save(update_fields=[
             "capability_account_id", "capability_policy_initialized",

@@ -12,10 +12,10 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APIRequestFactory
 
 from app.accounts.authentication import AUTH_COOKIE_NAME
-from app.accounts.models import PendingLogin, User, VisitorSession, GatewayRevocation, VisitLog
+from app.accounts.models import PendingLogin, User, VisitorSession, GatewayRevocation, VisitLog, LoginSession
 from app.accounts.session_authority import authorization_is_active, gateway_authorization, authorization_details, authorization_version
 from app.accounts.views import revoke_user_sessions
-from app.accounts.views.login import LoginIpRateThrottle
+from app.accounts.views.login import LoginFingerprintRateThrottle
 from app.settings import FREE_ACCOUNT_USERNAME
 from app.utils import get_request_subject
 
@@ -126,7 +126,7 @@ class GatewayLeaseTests(TransactionTestCase):
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"], CSRF_TRUSTED_ORIGINS=["https://testserver"],
-                   GATEWAY_ADMIN_SECRET="internal-test-secret")
+                   GATEWAY_ADMIN_SECRET="internal-test-secret", DJANGO_ALLOW_ALL_ORIGINS=False)
 class LoginSecurityTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -135,9 +135,18 @@ class LoginSecurityTests(TestCase):
         self.turnstile = patch("app.accounts.views.login.TURNSTILE_ENABLED", False)
         self.turnstile.start()
         self.addCleanup(self.turnstile.stop)
+        self.rendering = {"canvas": "a" * 64, "webgl": "b" * 64, "fonts": "c" * 64,
+                          "layout": "d" * 64, "shape": "0123456789abcdef"}
+        self.enroll(self.client)
+
+    def enroll(self, client):
+        result = client.post("/0x/user/login-status", {"fingerprint": self.rendering}, format="json")
+        self.assertEqual(result.status_code, 200, result.data)
 
     def csrf(self, client=None):
-        return (client or self.client).get("/0x/user/version-cfg").data["csrf_token"]
+        client = client or self.client
+        self.enroll(client)
+        return client.get("/0x/user/version-cfg").data["csrf_token"]
 
     def post(self, path, data=None, client=None, csrf=None, **headers):
         client = client or self.client
@@ -145,6 +154,7 @@ class LoginSecurityTests(TestCase):
                            HTTP_X_CSRFTOKEN=csrf or self.csrf(client), **headers)
 
     def prepare(self, client=None, free=False):
+        self.enroll(client or self.client)
         return self.post("/0x/user/login-free" if free else "/0x/user/login", {
             "username": self.user.username, "password": "Strong-password-123!",
         }, client=client)
@@ -156,9 +166,154 @@ class LoginSecurityTests(TestCase):
 
     def grant(self, client=None, user=None):
         client, user = client or self.client, user or self.user
-        request = SimpleNamespace(user=user, auth=Token.objects.get(user=user),
+        user.refresh_from_db()
+        key = client.cookies[AUTH_COOKIE_NAME].value
+        model = LoginSession if len(key) == 64 else Token
+        request = SimpleNamespace(user=user, auth=model.objects.get(key=key),
                                   COOKIES={key: value.value for key, value in client.cookies.items()})
         return gateway_authorization(request), get_request_subject(request)
+
+    def enable_multiple_sessions(self):
+        self.user.allow_multiple_sessions = True
+        self.user.save(update_fields=["allow_multiple_sessions"])
+
+    def test_multiple_logins_keep_both_api_and_gateway_authorities(self):
+        self.enable_multiple_sessions()
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.assertEqual(self.login().status_code, 200)
+        first, subject = self.grant()
+        self.assertEqual(self.login(other).status_code, 200)
+        second, _ = self.grant(other)
+        self.assertNotEqual(self.client.cookies[AUTH_COOKIE_NAME].value, other.cookies[AUTH_COOKIE_NAME].value)
+        self.assertTrue(authorization_is_active(first, subject))
+        self.assertTrue(authorization_is_active(second, subject))
+        self.assertEqual(self.client.get("/0x/user/me").status_code, 200)
+        self.assertEqual(other.get("/0x/user/me").status_code, 200)
+        self.assertEqual(LoginSession.objects.filter(user=self.user).count(), 2)
+        self.assertNotEqual(authorization_details(first, subject)["login_session_id"],
+                            authorization_details(second, subject)["login_session_id"])
+
+    def test_default_login_remains_single_session(self):
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.login()
+        first, subject = self.grant()
+        self.login(other)
+        self.assertFalse(authorization_is_active(first, subject))
+        self.assertEqual(self.client.get("/0x/user/me").status_code, 401)
+        self.assertEqual(other.get("/0x/user/me").status_code, 200)
+        self.assertFalse(LoginSession.objects.exists())
+
+    def test_multi_logout_revokes_only_current_session_and_preserves_pending_login(self):
+        self.enable_multiple_sessions()
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.login()
+        first, subject = self.grant()
+        self.login(other)
+        second, _ = self.grant(other)
+        prepared = self.prepare(other)
+        self.assertEqual(self.post("/0x/user/logout").status_code, 200)
+        self.assertFalse(authorization_is_active(first, subject))
+        self.assertTrue(authorization_is_active(second, subject))
+        self.assertEqual(other.get("/0x/user/me").status_code, 200)
+        confirmed = self.post("/0x/user/login-confirm", {"login_ticket": prepared.data["login_ticket"]}, client=other)
+        self.assertEqual(confirmed.status_code, 200)
+
+    def test_expiring_one_multi_session_does_not_expire_other_sessions(self):
+        self.enable_multiple_sessions()
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.login()
+        self.login(other)
+        LoginSession.objects.filter(key=self.client.cookies[AUTH_COOKIE_NAME].value).update(
+            created=timezone.now() - timedelta(days=8),
+        )
+        self.assertEqual(self.client.get("/0x/user/me").status_code, 401)
+        self.assertEqual(other.get("/0x/user/me").status_code, 200)
+        self.assertEqual(LoginSession.objects.count(), 1)
+
+    def test_disabling_multi_session_revokes_all_and_restores_single_login(self):
+        self.enable_multiple_sessions()
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.login()
+        first, subject = self.grant()
+        self.login(other)
+        second, _ = self.grant(other)
+        self.user.allow_multiple_sessions = False
+        self.user.save(update_fields=["allow_multiple_sessions"])
+        self.assertFalse(LoginSession.objects.exists())
+        self.assertFalse(authorization_is_active(first, subject))
+        self.assertFalse(authorization_is_active(second, subject))
+        self.login()
+        self.login(other)
+        self.assertEqual(self.client.get("/0x/user/me").status_code, 401)
+        self.assertEqual(other.get("/0x/user/me").status_code, 200)
+
+    def test_staff_and_superuser_remain_single_even_with_corrupt_multi_flag(self):
+        for role in ("is_staff", "is_superuser"):
+            with self.subTest(role=role):
+                User.objects.filter(pk=self.user.pk).update(**{role: True, "allow_multiple_sessions": True})
+                self.user.refresh_from_db()
+                other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+                self.login()
+                first, subject = self.grant()
+                self.login(other)
+                self.assertFalse(authorization_is_active(first, subject))
+                self.assertEqual(self.client.get("/0x/user/me").status_code, 401)
+                self.assertEqual(other.get("/0x/user/me").status_code, 200)
+                self.assertFalse(LoginSession.objects.exists())
+                self.user.refresh_from_db()
+                self.assertFalse(self.user.allow_multiple_sessions)
+
+    def test_promotion_to_admin_revokes_existing_multi_logins(self):
+        self.enable_multiple_sessions()
+        self.login()
+        grant, subject = self.grant()
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.allow_multiple_sessions)
+        self.assertFalse(LoginSession.objects.exists())
+        self.assertFalse(authorization_is_active(grant, subject))
+
+    def test_password_change_revokes_every_multi_login_and_reissues_current(self):
+        self.enable_multiple_sessions()
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.login()
+        first, subject = self.grant()
+        self.login(other)
+        second, _ = self.grant(other)
+        result = self.post("/0x/user/change-password", {
+            "current_password": "Strong-password-123!", "new_password": "New-strong-password-987!",
+        })
+        self.assertEqual(result.status_code, 200, result.data)
+        self.assertFalse(authorization_is_active(first, subject))
+        self.assertFalse(authorization_is_active(second, subject))
+        self.assertEqual(LoginSession.objects.count(), 1)
+        self.assertEqual(self.client.get("/0x/user/me").status_code, 200)
+        self.assertEqual(other.get("/0x/user/me").status_code, 401)
+
+    def test_revoke_all_multi_sessions_queues_each_version(self):
+        self.enable_multiple_sessions()
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.login()
+        self.login(other)
+        versions = {authorization_details(self.grant(client)[0], self.user.username)["version"]
+                    for client in (self.client, other)}
+        revoke_user_sessions(self.user)
+        self.assertFalse(LoginSession.objects.exists())
+        self.assertEqual(set(GatewayRevocation.objects.values_list("version", flat=True)), versions)
+
+    def test_policy_change_invalidates_all_multi_gateway_grants(self):
+        self.enable_multiple_sessions()
+        other = APIClient(enforce_csrf_checks=True, HTTP_USER_AGENT="multi-session-test")
+        self.login()
+        first, subject = self.grant()
+        self.login(other)
+        second, _ = self.grant(other)
+        self.user.model_limit = ["restricted-model"]
+        self.user.save(update_fields=["model_limit"])
+        self.assertFalse(authorization_is_active(first, subject))
+        self.assertFalse(authorization_is_active(second, subject))
+        self.assertEqual(GatewayRevocation.objects.count(), 2)
 
     def test_all_public_login_posts_require_csrf(self):
         for path in ("login", "register", "login-free", "login-confirm", "logout"):
@@ -306,11 +461,41 @@ class LoginSecurityTests(TestCase):
         self.assertNotEqual(self.client.get("/0x/user/me").status_code, 200)
         self.assertEqual(VisitorSession.objects.count(), 1)
 
-    def test_ip_throttle_uses_gateway_client_address(self):
+    def test_render_throttle_distinguishes_visitors_sharing_nat(self):
         factory = APIRequestFactory()
-        first = factory.post("/0x/user/login", HTTP_X_CHATGPT_MIRROR_CLIENT_IP="203.0.113.10")
-        second = factory.post("/0x/user/login", HTTP_X_CHATGPT_MIRROR_CLIENT_IP="203.0.113.11")
+        fp = {"canvas": "a" * 64, "webgl": "b" * 64, "fonts": "c" * 64,
+              "layout": "d" * 64, "shape": "0123456789abcdef"}
+        from rest_framework.request import Request
+        from rest_framework.parsers import JSONParser
+        def visitor(rendering, ip):
+            from django.core import signing
+            from app.accounts.login_guard import COOKIE, SALT
+            raw = factory.post("/0x/user/login", {"fingerprint": rendering}, format="json",
+                               HTTP_X_CHATGPT_MIRROR_CLIENT_IP=ip)
+            raw.COOKIES[COOKIE] = signing.dumps(rendering, salt=SALT, compress=True)
+            return Request(raw, parsers=[JSONParser()])
+        first = visitor(fp, "203.0.113.10")
+        second = visitor({**fp, "canvas": "e" * 64, "shape": "fedcba9876543210"}, "203.0.113.10")
+        rotated = visitor(fp, "203.0.113.11")
         for _ in range(20):
-            self.assertTrue(LoginIpRateThrottle().allow_request(first, None))
-        self.assertFalse(LoginIpRateThrottle().allow_request(first, None))
-        self.assertTrue(LoginIpRateThrottle().allow_request(second, None))
+            self.assertTrue(LoginFingerprintRateThrottle().allow_request(first, None))
+        self.assertFalse(LoginFingerprintRateThrottle().allow_request(first, None))
+        self.assertFalse(LoginFingerprintRateThrottle().allow_request(rotated, None))
+        self.assertTrue(LoginFingerprintRateThrottle().allow_request(second, None))
+
+    def test_missing_rendering_receipt_rejects_every_login_entry_point(self):
+        other = APIClient()
+        for path in ("login", "login-free", "register", "login-confirm"):
+            with self.subTest(path=path), patch.object(User, "check_password", side_effect=AssertionError("Password check reached")):
+                response = other.post("/0x/user/" + path, {
+                    "username": self.user.username, "password": "Strong-password-123!",
+                    "fingerprint": self.rendering,
+                }, format="json")
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.data["code"], "fingerprint_required")
+        self.assertFalse(PendingLogin.objects.exists())
+
+    def test_missing_rendering_status_does_not_report_zero_cooldown(self):
+        response = APIClient().post("/0x/user/login-status", {"fingerprint": {}}, format="json")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["code"], "fingerprint_required")

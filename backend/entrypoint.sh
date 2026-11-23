@@ -3,14 +3,14 @@ set -e
 
 mkdir -p /app/backend/logs /app/backend/db
 
-python manage.py migrate --noinput
-python cli/create_init_user.py
+python manage.py migrate --noinput >/dev/null
+python cli/create_init_user.py >/dev/null
 
 python manage.py retry_gateway_revocations &
 retry_pid=$!
 python manage.py monitor_account_health &
 health_pid=$!
-python manage.py runserver 0.0.0.0:8000 --noreload &
+python manage.py runserver 0.0.0.0:8000 --noreload >/dev/null &
 server_pid=$!
 shutdown() {
     result=$?

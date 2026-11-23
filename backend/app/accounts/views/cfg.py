@@ -6,10 +6,10 @@ from django.middleware.csrf import get_token
 from app.permissions import IsSuperUser
 from app.settings import SHOW_GITHUB, TURNSTILE_ENABLED, TURNSTILE_SITE_KEY
 from app.utils import req_gateway
-from app.accounts.views.login import LoginIpRateThrottle
+from app.accounts.views.login import LoginFingerprintRateThrottle
 
 
-class LoginBootstrapThrottle(LoginIpRateThrottle):
+class LoginBootstrapThrottle(LoginFingerprintRateThrottle):
     scope = "login_bootstrap"
 
 
@@ -34,8 +34,14 @@ class AccessControlView(APIView):
         return Response(res)
 
     def post(self, request):
-        paths = request.data.get("paths", request.data.get("hash_paths", []))
-        res = req_gateway("post", "/api/blocked-paths", json={"paths": paths})
+        payload = {}
+        if "settings_locked" in request.data:
+            payload["settings_locked"] = request.data["settings_locked"]
+        if "dots_locked" in request.data:
+            payload["dots_locked"] = request.data["dots_locked"]
+        if "paths" in request.data or "hash_paths" in request.data:
+            payload["paths"] = request.data.get("paths", request.data.get("hash_paths"))
+        res = req_gateway("post", "/api/blocked-paths", json=payload)
         return Response(res)
 
 

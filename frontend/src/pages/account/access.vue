@@ -1,82 +1,55 @@
 <template>
-  <div class="settings-stack">
-    <t-card title="访问限制" subtitle="阻止用户进入指定路径" bordered>
-      <template #subtitle>
-        支持普通路径和 # 哈希路径；命中路径及其子路径都会被拦截
-      </template>
-      <div class="section">
-        <h4>当前拦截路径</h4>
-        <t-tag
-          v-for="(path, index) in blockedPaths"
-          :key="index"
-          closable
-          style="margin: 4px"
-          theme="danger"
-          @close="removePath(index)"
-        >
-          {{ path }}
-        </t-tag>
-        <div v-if="blockedPaths.length === 0" class="empty-text">
-          暂无拦截路径
+  <div class="workspace-page settings-page settings-stack">
+    <t-card :title="t('上游访问控制')" bordered>
+      <div class="security-status">
+        <div>
+          <div class="status-title">{{ t('禁止读取和修改上游设置') }}</div>
+          <div class="status-description">
+            {{ t('统一控制通知、个性化、记忆、安全、账户、订阅和 Codex 设置。网关直接拦截相关接口请求。') }}
+          </div>
         </div>
+        <t-switch v-model="settingsLocked" :disabled="!loaded || saving" :aria-label="t('禁止读取和修改上游设置')" @change="saved = false" />
       </div>
-
-      <t-divider />
-
-      <div class="section">
-        <h4>添加新的拦截路径</h4>
-        <t-space style="margin-top: 12px">
-          <t-input
-            v-model="newPath"
-            aria-label="拦截路径"
-            placeholder="例如 #settings/Account 或 library"
-            :maxlength="512"
-            style="width: 300px"
-            @keyup.enter="addPath"
-          />
-          <t-button theme="primary" @click="addPath">添加</t-button>
-        </t-space>
-        <div class="field-help">
-          无需输入开头的 /；不能填写完整 URL 或查询参数；保存后已打开页面会自动同步
+      <div class="security-status dot-control">
+        <div>
+          <div class="status-title">{{ t('禁止访问 Dot') }}</div>
+          <div class="status-description">
+            {{ t('禁用 Dot 页面、消息、审批和管理接口，并隐藏相关入口。对所有账号立即生效。') }}
+          </div>
         </div>
+        <t-switch v-model="dotsLocked" :disabled="!loaded || saving" :aria-label="t('禁止访问 Dot')" @change="saved = false" />
       </div>
-
-      <t-divider />
-
-      <div class="section">
-        <h4>预设拦截模板</h4>
-        <t-space style="margin-top: 12px; flex-wrap: wrap">
-          <t-button
-            v-for="preset in presets"
-            :key="preset"
-            variant="outline"
-            size="small"
-            :disabled="hasPath(preset)"
-            @click="addPreset(preset)"
-          >
-            {{ preset }}
-          </t-button>
-        </t-space>
+      <div class="save-row">
+        <t-button theme="primary" :disabled="!loaded" :loading="saving" @click="save">{{ t('保存配置') }}</t-button>
+        <span v-if="saved" class="saved-text">{{ t('已保存') }}</span>
       </div>
-
-      <t-divider />
-
-      <t-button theme="primary" :loading="saving" @click="save">
-        保存配置
-      </t-button>
-      <span v-if="saved" class="saved-text">已保存</span>
+      <details class="rule-details">
+        <summary data-press-feedback="ripple">{{ t('查看接口及用途（') }}{{ rules.length }} {{ t('项）') }}</summary>
+        <div class="rule-scroll">
+          <table class="rules-table">
+            <thead><tr><th>{{ t('路径与备注') }}</th><th>{{ t('请求方法') }}</th><th>{{ t('所属开关') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="rule in rules" :key="rule.path">
+                <td><code>{{ rule.path }}</code> <span class="rule-label">[{{ t(rule.label) }}]</span></td>
+                <td>{{ rule.methods.join(' / ') }}</td>
+                <td>{{ rule.control === 'dots_locked' ? 'Dot' : t('上游设置') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
     </t-card>
 
-    <t-card title="登录人机验证" subtitle="此设置由运行环境控制，修改后需要重启服务" bordered>
+    <t-card :title="t('登录人机验证')" :subtitle="t('此设置由运行环境控制，修改后需要重启服务')" bordered>
       <div class="security-status">
         <div>
           <div class="status-title">Cloudflare Turnstile</div>
           <div class="status-description">
-            开启后，每次登录、免费体验和注册都必须完成验证。
+            {{ t('开启后，每次登录、免费体验和注册都必须完成验证。') }}
           </div>
         </div>
         <t-tag :theme="turnstileCfg.enabled ? 'success' : 'default'" variant="light">
-          {{ turnstileCfg.enabled ? '已开启' : '未开启' }}
+          {{ turnstileCfg.enabled ? t('已开启') : t('未开启') }}
         </t-tag>
       </div>
 
@@ -87,17 +60,17 @@
         </div>
         <div class="env-row">
           <code>CLOUDFLARE_TURNSTILE_SITE_KEY</code>
-          <span>{{ turnstileCfg.siteKeyConfigured ? '已配置' : '未生效' }}</span>
+          <span>{{ turnstileCfg.siteKeyConfigured ? t('已配置') : t('未生效') }}</span>
         </div>
         <div class="env-row">
           <code>CLOUDFLARE_TURNSTILE_SECRET_KEY</code>
-          <span>{{ turnstileCfg.enabled ? '仅后端可见' : '未生效' }}</span>
+          <span>{{ turnstileCfg.enabled ? t('仅后端可见') : t('未生效') }}</span>
         </div>
       </div>
 
       <t-alert
         class="security-note"
-        message="disable 时，已填写的站点密钥和机密不会用于登录验证；enable 时缺少任一配置将阻止服务启动。"
+        :message="t('disable 时，已填写的站点密钥和机密不会用于登录验证；enable 时缺少任一配置将阻止服务启动。')"
       />
     </t-card>
   </div>
@@ -107,117 +80,60 @@
 import { ref, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
 
-const blockedPaths = ref<string[]>([])
-const newPath = ref('')
+const { t } = useWorkspaceCopy()
+
+type SettingsRule = {
+  path: string
+  label: string
+  methods: string[]
+  control?: 'settings_locked' | 'dots_locked'
+}
+
+const settingsLocked = ref(false)
+const dotsLocked = ref(true)
+const rules = ref<SettingsRule[]>([])
+const loaded = ref(false)
 const saving = ref(false)
 const saved = ref(false)
-const turnstileCfg = ref({
-  enabled: false,
-  siteKeyConfigured: false
-})
-
-const presets = [
-  '#settings/Personalization',
-  '#settings/Security',
-  '#settings/Billing',
-  '#settings/Account',
-  '#settings/Safety',
-  '#pricing',
-]
+const turnstileCfg = ref({ enabled: false, siteKeyConfigured: false })
 
 onMounted(async () => {
   const [data, versionResponse] = await Promise.all([
     request('/0x/user/access-control'),
     fetch('/0x/user/version-cfg').then(response => response.json()).catch(() => null)
   ])
-  if (data) blockedPaths.value = (data.paths || data.hash_paths || []).map(toDisplayPath)
+  if (data) {
+    settingsLocked.value = data.settings_locked ?? ((data.paths || data.hash_paths || []).length > 0)
+    dotsLocked.value = data.dots_locked ?? true
+    rules.value = data.rules || []
+    loaded.value = true
+  }
   if (versionResponse) {
     turnstileCfg.value.enabled = Boolean(versionResponse.turnstile_enabled)
     turnstileCfg.value.siteKeyConfigured = Boolean(versionResponse.turnstile_site_key)
   }
 })
 
-function addPath() {
-  const rawPath = newPath.value.trim()
-  const validationError = validatePath(rawPath)
-  if (validationError) {
-    MessagePlugin.warning(validationError)
-    return
-  }
-  const p = toDisplayPath(rawPath)
-  if (!p) return
-  if (blockedPaths.value.length >= 200) {
-    MessagePlugin.warning('拦截路径最多允许 200 条')
-    return
-  }
-  if (hasPath(p)) {
-    MessagePlugin.warning('路径已存在')
-    return
-  }
-  blockedPaths.value.push(p)
-  newPath.value = ''
-  saved.value = false
-}
-
-function removePath(index: number) {
-  blockedPaths.value.splice(index, 1)
-  saved.value = false
-}
-
-function addPreset(p: string) {
-  if (!hasPath(p)) {
-    blockedPaths.value.push(p)
-    saved.value = false
-  }
-}
-
-function pathKey(path: string) {
-  return toDisplayPath(path).replace(/\/+$/, '')
-}
-
-function toDisplayPath(path: string) {
-  return path.trim().replace(/^\/+/, '')
-}
-
-function validatePath(path: string) {
-  if (path.length > 512) return '单条拦截路径不能超过 512 个字符'
-  if (!path || path === '/') return '不能拦截站点根路径'
-  if (/[^\x21-\x7e]/.test(path)) return '拦截路径只能包含不带空白的 ASCII 字符'
-  if (/^[a-z][a-z\d+.-]*:\/\//i.test(path) || path.startsWith('//')) {
-    return '请填写站内路径，不能填写完整 URL'
-  }
-  const normalized = toDisplayPath(path)
-  if (normalized.includes('\\') || normalized.split('/').some(segment => segment === '.' || segment === '..')) {
-    return '拦截路径不能包含反斜杠或相对路径段'
-  }
-  if (normalized.includes('?')) return '拦截路径不能包含查询参数'
-  if (normalized.includes('#') && !normalized.startsWith('#')) return '# 只能用于开头的哈希路径'
-  if (normalized === '#') return '哈希路径不能只有 #'
-  const lower = normalized.toLowerCase()
-  if (lower === '#settings/plugins' || lower.startsWith('#settings/plugins/')) {
-    return '#settings/Plugins 是系统保留路径，不能拦截'
-  }
-  return ''
-}
-
-function hasPath(path: string) {
-  const key = pathKey(path)
-  return blockedPaths.value.some(item => pathKey(item) === key)
-}
-
 async function save() {
   saving.value = true
   saved.value = false
-  const data = await request('/0x/user/access-control', 'POST', { paths: blockedPaths.value })
-  if (data) {
-    blockedPaths.value = (data.paths || data.hash_paths || blockedPaths.value).map(toDisplayPath)
-    saved.value = true
-    MessagePlugin.success('配置已保存')
-  } else {
-    MessagePlugin.error('保存失败')
+  try {
+    const data = await request('/0x/user/access-control', 'POST', {
+      settings_locked: settingsLocked.value,
+      dots_locked: dotsLocked.value
+    })
+    if (data) {
+      settingsLocked.value = data.settings_locked
+      dotsLocked.value = data.dots_locked ?? true
+      rules.value = data.rules || []
+      saved.value = true
+      MessagePlugin.success(t('设置访问策略已保存'))
+    }
+  } finally {
+    saving.value = false
   }
-  saving.value = false
 }
 </script>
 
@@ -227,30 +143,16 @@ async function save() {
   gap: 20px;
 }
 
-.section {
-  padding: 8px 0;
-}
-
-.section h4 {
-  margin: 0 0 8px 0;
-  color: var(--app-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.empty-text,
-.field-help {
-  color: var(--app-text-muted);
-  font-size: 13px;
-}
-
-.empty-text {
-  padding: 12px 0;
-}
-
-.field-help {
-  margin-top: 6px;
-}
+.save-row { margin-top: 20px; }
+.dot-control { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--app-border); }
+.rule-details { margin-top: 24px; }
+.rule-details summary { cursor: pointer; color: var(--app-text); font-weight: 500; }
+.rule-scroll { margin-top: 12px; overflow-x: auto; }
+.rules-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rules-table th, .rules-table td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--app-border); }
+.rules-table th { color: var(--app-text-muted); }
+.rules-table code { overflow-wrap: anywhere; }
+.rule-label { color: var(--app-text-muted); white-space: nowrap; }
 
 .saved-text {
   margin-left: 10px;
@@ -292,7 +194,7 @@ async function save() {
   gap: 24px;
   min-height: 48px;
   padding: 10px 14px;
-  border-bottom: 1px solid #e8e8e4;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .env-row:last-child {
@@ -300,7 +202,7 @@ async function save() {
 }
 
 .env-row code {
-  color: #3f3f3b;
+  color: var(--app-text);
   font-size: 12px;
   overflow-wrap: anywhere;
 }

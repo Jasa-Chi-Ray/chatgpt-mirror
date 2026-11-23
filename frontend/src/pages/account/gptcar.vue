@@ -1,16 +1,16 @@
 <template>
-  <div>
-    <t-card title="账号池" subtitle="将上游账号按使用场景组织为不同账号池" :bordered="false">
+  <div class="workspace-page data-page pools-page">
+    <t-card :title="t('账号池')" :subtitle="t('将上游账号按使用场景组织为不同账号池')" :bordered="false">
       <template #actions>
         <t-button theme="primary" @click="showAddDialog">
           <template #icon><t-icon name="add" /></template>
-          添加号池
+          {{ t('添加号池') }}
         </t-button>
       </template>
 
       <t-table
         :data="tableData"
-        :columns="columns"
+        :columns="labels(columns)"
         :loading="loading"
         :pagination="pagination"
         @page-change="onPageChange"
@@ -24,10 +24,10 @@
         </template>
         <template #op="{ row }">
           <t-space>
-            <t-link theme="primary" @click="showDetailDialog(row)">详情</t-link>
-            <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
-            <t-popconfirm content="确定删除该号池吗？" @confirm="handleDelete(row)">
-              <t-link theme="danger">删除</t-link>
+            <t-link theme="primary" @click="showDetailDialog(row)">{{ t('详情') }}</t-link>
+            <t-link theme="primary" @click="showEditDialog(row)">{{ t('编辑') }}</t-link>
+            <t-popconfirm :content="t('确定删除该号池吗？')" @confirm="handleDelete(row)">
+              <t-link theme="danger">{{ t('删除') }}</t-link>
             </t-popconfirm>
           </t-space>
         </template>
@@ -37,17 +37,17 @@
     <!-- 添加/编辑对话框 -->
     <t-dialog
       :visible="dialogVisible"
-      :header="isEdit ? '编辑号池' : '添加号池'"
+      :header="isEdit ? t('编辑号池') : t('添加号池')"
       :confirm-btn="{ loading: submitLoading }"
       @confirm="handleSubmit"
       @close="dialogVisible = false"
     >
       <t-form :data="formData" :rules="formRules" ref="formRef" label-width="100px">
-        <t-form-item label="号池名称" name="car_name">
-          <t-input v-model="formData.car_name" placeholder="请输入号池名称" />
+        <t-form-item :label="t('号池名称')" name="car_name">
+          <t-input v-model="formData.car_name" :placeholder="t('请输入号池名称')" />
         </t-form-item>
-        <t-form-item label="关联账号" name="gpt_account_list">
-          <t-select v-model="formData.gpt_account_list" multiple placeholder="请选择上游账号">
+        <t-form-item :label="t('关联账号')" name="gpt_account_list">
+          <t-select v-model="formData.gpt_account_list" multiple :placeholder="t('请选择上游账号')">
             <t-option
               v-for="account in accountOptions"
               :key="account.id"
@@ -56,17 +56,17 @@
             />
           </t-select>
         </t-form-item>
-        <t-form-item label="备注" name="remark">
-          <t-textarea v-model="formData.remark" placeholder="请输入备注" />
+        <t-form-item :label="t('备注')" name="remark">
+          <t-textarea v-model="formData.remark" :placeholder="t('请输入备注')" />
         </t-form-item>
       </t-form>
     </t-dialog>
 
     <t-dialog
       :visible="detailVisible"
-      :header="detailData ? `号池详情 · ${detailData.car_name}` : '号池详情'"
+      :header="detailData ? t('号池详情 · {0}', [detailData.car_name]) : t('号池详情')"
       :confirm-btn="null"
-      cancel-btn="关闭"
+      :cancel-btn="t('关闭')"
       width="860px"
       @close="detailVisible = false"
     >
@@ -75,28 +75,28 @@
           <t-table
             v-if="detailData.assigned_users.length"
             :data="detailData.assigned_users"
-            :columns="detailColumns"
+            :columns="labels(detailColumns)"
             row-key="id"
             :pagination="null"
           >
             <template #is_active="{ row }">
               <t-tag size="small" :theme="row.is_active ? 'success' : 'warning'">
-                {{ row.is_active ? '正常' : '停用' }}
+                {{ row.is_active ? t('正常') : t('停用') }}
               </t-tag>
             </template>
             <template #expired_date="{ row }">
-              <span>{{ row.expired_date || '未设置' }}</span>
+              <span>{{ row.expired_date || t('未设置') }}</span>
             </template>
             <template #op="{ row }">
               <t-popconfirm
-                content="确定将该用户移出当前号池吗？"
+                :content="t('确定将该用户移出当前号池吗？')"
                 @confirm="removeUserFromCar(row)"
               >
-                <t-link theme="danger" :disabled="assignmentLoading">踢出</t-link>
+                <t-link theme="danger" :disabled="assignmentLoading">{{ t('踢出') }}</t-link>
               </t-popconfirm>
             </template>
           </t-table>
-          <t-empty v-else description="该号池尚未分配给任何用户" />
+          <t-empty v-else :description="t('该号池尚未分配给任何用户')" />
           <div class="detail-actions">
             <t-button
               theme="primary"
@@ -104,7 +104,7 @@
               @click="showAddUserDialog"
             >
               <template #icon><t-icon name="user-add" /></template>
-              加入用户
+              {{ t('加入用户') }}
             </t-button>
           </div>
         </template>
@@ -113,25 +113,25 @@
 
     <t-dialog
       :visible="addUserVisible"
-      header="加入用户"
-      :confirm-btn="{ content: '加入', loading: assignmentLoading, disabled: !selectedUserIds.length }"
+      :header="t('加入用户')"
+      :confirm-btn="{ content: t('加入'), loading: assignmentLoading, disabled: !selectedUserIds.length }"
       @confirm="addUsersToCar"
       @close="addUserVisible = false"
     >
       <t-form label-width="90px">
-        <t-form-item label="选择用户">
+        <t-form-item :label="t('选择用户')">
           <t-select
             v-model="selectedUserIds"
             multiple
             filterable
             clearable
-            placeholder="请选择要加入当前号池的用户"
+            :placeholder="t('请选择要加入当前号池的用户')"
           >
             <t-option
               v-for="user in detailData?.available_users || []"
               :key="user.id"
               :value="user.id"
-              :label="`${user.username}${user.is_active ? '' : '（停用）'}`"
+              :label="`${user.username}${user.is_active ? '' : t('（停用）')}`"
             />
           </t-select>
         </t-form-item>
@@ -144,6 +144,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t, labels } = useWorkspaceCopy()
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -294,7 +297,7 @@ const addUsersToCar = async () => {
   })
   assignmentLoading.value = false
   if (!data) return
-  MessagePlugin.success('用户已加入号池')
+  MessagePlugin.success(t('用户已加入号池'))
   addUserVisible.value = false
   await fetchCarDetail(carId)
 }
@@ -308,7 +311,7 @@ const removeUserFromCar = async (user: AssignedUser) => {
   })
   assignmentLoading.value = false
   if (!data) return
-  MessagePlugin.success('用户已移出号池')
+  MessagePlugin.success(t('用户已移出号池'))
   await fetchCarDetail(carId)
 }
 
@@ -335,7 +338,7 @@ const handleSubmit = async () => {
   submitLoading.value = false
 
   if (data) {
-    MessagePlugin.success(isEdit.value ? '更新成功' : '添加成功')
+    MessagePlugin.success(isEdit.value ? t('更新成功') : t('添加成功'))
     dialogVisible.value = false
     fetchData()
   }
@@ -344,7 +347,7 @@ const handleSubmit = async () => {
 const handleDelete = async (row: any) => {
   const data = await request('/0x/chatgpt/car', 'DELETE', { ids: [row.id] })
   if (data) {
-    MessagePlugin.success('删除成功')
+    MessagePlugin.success(t('删除成功'))
     fetchData()
   }
 }

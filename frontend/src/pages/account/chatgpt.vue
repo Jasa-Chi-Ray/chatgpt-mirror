@@ -1,31 +1,31 @@
 <template>
-  <div>
-    <t-card title="上游账号" subtitle="维护账号凭证、登录模式和连接状态" :bordered="false">
+  <div class="workspace-page data-page upstream-page">
+    <t-card :title="t('上游账号')" :subtitle="t('维护账号凭证、登录模式和连接状态')" :bordered="false">
       <template #actions>
         <t-space>
           <AccountHealthSettings />
           <t-button :loading="checkingAll" @click="handleCheckTokenExpiry()">
             <template #icon><t-icon name="search" /></template>
-            一键检测
+            {{ t('一键检测') }}
           </t-button>
           <t-button theme="primary" @click="showAddDialog">
             <template #icon><t-icon name="add" /></template>
-            添加账号
+            {{ t('添加账号') }}
           </t-button>
         </t-space>
       </template>
       <div class="account-toolbar">
-        <t-input v-model="query" clearable placeholder="搜索上游账号" @enter="applyFilters" />
-        <t-select v-model="statusFilter" clearable placeholder="全部状态" @change="applyFilters">
-          <t-option value="healthy" label="健康" />
-          <t-option value="unhealthy" label="异常" />
+        <t-input v-model="query" clearable :placeholder="t('搜索上游账号')" @enter="applyFilters" />
+        <t-select v-model="statusFilter" clearable :placeholder="t('全部状态')" @change="applyFilters">
+          <t-option value="healthy" :label="t('健康')" />
+          <t-option value="unhealthy" :label="t('异常')" />
         </t-select>
-        <t-button variant="outline" @click="applyFilters">查询</t-button>
+        <t-button variant="outline" @click="applyFilters">{{ t('查询') }}</t-button>
       </div>
 
       <t-table
         :data="tableData"
-        :columns="columns"
+        :columns="labels(columns)"
         :loading="loading"
         :pagination="pagination"
         @page-change="onPageChange"
@@ -33,7 +33,7 @@
       >
         <template #auth_status="{ row }">
           <t-tag :theme="row.auth_status ? 'success' : 'danger'">
-            {{ row.auth_status ? '有效' : '已过期' }}
+            {{ row.auth_status ? t('有效') : t('已过期') }}
           </t-tag>
         </template>
         <template #plan_type="{ row }">
@@ -42,16 +42,16 @@
           </t-tag>
         </template>
         <template #login_count="{ row }">
-          <span>{{ row.login_count || 0 }} 次</span>
+          <span>{{ row.login_count || 0 }} {{ t('次') }}</span>
         </template>
         <template #access_token_valid="{ row }">
           <t-tag :theme="row.access_token_valid ? 'success' : 'danger'">
-            {{ row.access_token_valid ? '可用' : '不可用' }}
+            {{ row.access_token_valid ? t('可用') : t('不可用') }}
           </t-tag>
         </template>
         <template #session_token_valid="{ row }">
           <t-tag :theme="row.session_token_valid ? 'success' : 'danger'">
-            {{ row.session_token_valid ? '可用' : '不可用' }}
+            {{ row.session_token_valid ? t('可用') : t('不可用') }}
           </t-tag>
         </template>
         <template #supported_login_modes="{ row }">
@@ -64,7 +64,7 @@
             >
               {{ mode.toUpperCase() }}
             </t-tag>
-            <span v-if="!row.supported_login_modes?.length">无</span>
+            <span v-if="!row.supported_login_modes?.length">{{ t('无') }}</span>
           </t-space>
         </template>
         <template #last_check_at="{ row }">
@@ -72,7 +72,7 @@
         </template>
         <template #proxy_node_id="{ row }">
           <t-tag :theme="row.proxy_node_id ? 'primary' : 'default'" variant="light">
-            {{ row.proxy_node_id ? `节点 ${row.proxy_node_id}` : '直连' }}
+            {{ row.proxy_node_id ? t('节点 {0}', [row.proxy_node_id]) : t('直连') }}
           </t-tag>
         </template>
         <template #token_remaining="{ row }">
@@ -86,7 +86,7 @@
         <template #op="{ row }">
           <t-space>
             <t-link theme="primary" :loading="checkingId === row.id" @click="handleCheckTokenExpiry(row)">
-              检测
+              {{ t('检测') }}
             </t-link>
             <t-link
               v-if="row.has_refresh_token"
@@ -94,14 +94,14 @@
               :loading="refreshingId === row.id"
               @click="handleRefreshToken(row)"
             >
-              刷新Token
+              {{ t('刷新Token') }}
             </t-link>
-            <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
-            <t-popconfirm content="确定重置该账号的被登录次数吗？" @confirm="handleResetLoginCount(row)">
-              <t-link theme="warning">重置次数</t-link>
+            <t-link theme="primary" @click="showEditDialog(row)">{{ t('编辑') }}</t-link>
+            <t-popconfirm :content="t('确定重置该账号的被登录次数吗？')" @confirm="handleResetLoginCount(row)">
+              <t-link theme="warning">{{ t('重置次数') }}</t-link>
             </t-popconfirm>
-            <t-popconfirm content="确定删除该账号吗？" @confirm="handleDelete(row)">
-              <t-link theme="danger">删除</t-link>
+            <t-popconfirm :content="t('确定删除该账号吗？')" @confirm="handleDelete(row)">
+              <t-link theme="danger">{{ t('删除') }}</t-link>
             </t-popconfirm>
           </t-space>
         </template>
@@ -111,22 +111,22 @@
     <!-- 添加对话框 -->
     <t-dialog
       :visible="addDialogVisible"
-      header="添加上游账号"
+      :header="t('添加上游账号')"
       :confirm-btn="{ loading: submitLoading }"
       @confirm="handleAdd"
       @close="addDialogVisible = false"
       width="600px"
     >
       <t-form :data="addFormData" ref="addFormRef" label-width="120px">
-        <t-form-item label="Token 列表" name="chatgpt_token_list">
+        <t-form-item :label="t('Token 列表')" name="chatgpt_token_list">
           <t-textarea
             v-model="tokenInput"
-            placeholder="支持直接粘贴 AccessToken、SessionToken、完整 Cookie 文本或 Netscape HTTP Cookie File"
+            :placeholder="t('支持直接粘贴 AccessToken、SessionToken、完整 Cookie 文本或 Netscape HTTP Cookie File')"
             :autosize="{ minRows: 5, maxRows: 10 }"
           />
         </t-form-item>
         <t-form-item>
-          <t-alert theme="info" message="支持自动识别 AccessToken、SessionToken、浏览器 Cookie 文本与 Netscape HTTP Cookie File，并自动提取额外官网 Cookie。" />
+          <t-alert theme="info" :message="t('支持自动识别 AccessToken、SessionToken、浏览器 Cookie 文本与 Netscape HTTP Cookie File，并自动提取额外官网 Cookie。')" />
         </t-form-item>
       </t-form>
     </t-dialog>
@@ -134,25 +134,25 @@
     <!-- 编辑对话框 -->
     <t-dialog
       :visible="editDialogVisible"
-      header="编辑账号备注"
+      :header="t('编辑账号备注')"
       :confirm-btn="{ loading: submitLoading }"
       @confirm="handleEdit"
       @close="editDialogVisible = false"
     >
       <t-form :data="editFormData" ref="editFormRef" label-width="100px">
-        <t-form-item label="账号">
+        <t-form-item :label="t('账号')">
           <t-input :value="editFormData.chatgpt_username" disabled />
         </t-form-item>
-        <t-form-item label="备注" name="remark">
-          <t-textarea v-model="editFormData.remark" placeholder="请输入备注" />
+        <t-form-item :label="t('备注')" name="remark">
+          <t-textarea v-model="editFormData.remark" :placeholder="t('请输入备注')" />
         </t-form-item>
-        <t-form-item label="代理节点" name="proxy_node_id">
-          <t-select v-model="editFormData.proxy_node_id" clearable placeholder="不绑定节点则直连">
+        <t-form-item :label="t('代理节点')" name="proxy_node_id">
+          <t-select v-model="editFormData.proxy_node_id" clearable :placeholder="t('不绑定节点则直连')">
             <t-option
               v-for="node in proxyNodeOptions"
               :key="node.id"
               :value="node.id"
-              :label="`节点 ${node.id}`"
+              :label="t('节点 {0}', [node.id])"
             />
           </t-select>
         </t-form-item>
@@ -166,6 +166,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
 import AccountHealthSettings from './components/AccountHealthSettings.vue'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t, labels } = useWorkspaceCopy()
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -244,30 +247,34 @@ const getPlanTheme = (planType?: string) => {
 }
 
 const secondsUntilAccessTokenExpiry = (row: any) => {
-  if (!row?.access_token_exp) return null
-  return Number(row.access_token_exp) - nowSeconds.value
+  if (row?.access_token_valid !== true || !row?.access_token_exp) return null
+  const expiry = Number(row.access_token_exp)
+  return Number.isFinite(expiry) ? expiry - nowSeconds.value : null
 }
 
 const formatSeconds = (seconds: number | null) => {
-  if (seconds === null || Number.isNaN(seconds)) return '-'
-  if (seconds <= 0) return '已过期'
+  if (seconds === null || Number.isNaN(seconds)) return t('不可计算')
+  if (seconds <= 0) return t('已过期')
   const days = Math.floor(seconds / 86400)
   const hours = Math.floor((seconds % 86400) / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  if (days > 0) return `${days}天${hours}小时`
-  if (hours > 0) return `${hours}小时${minutes}分钟`
-  return `${Math.max(minutes, 1)}分钟`
+  if (days > 0) return t('{0}天{1}小时', [days, hours])
+  if (hours > 0) return t('{0}小时{1}分钟', [hours, minutes])
+  return t('{0}分钟', [Math.max(minutes, 1)])
 }
 
 const formatTokenRemaining = (row: any) => {
+  if (row?.access_token_valid !== true) return t('不可计算')
   const seconds = secondsUntilAccessTokenExpiry(row)
-  if ((seconds === null || seconds <= 0) && row?.session_token_valid) {
-    return '待刷新'
+  if (seconds === null) return t('不可计算')
+  if (seconds <= 0 && row?.session_token_valid) {
+    return t('待刷新')
   }
   return formatSeconds(seconds)
 }
 
 const getTokenRemainingTheme = (row: any) => {
+  if (row?.access_token_valid !== true) return 'default'
   const seconds = secondsUntilAccessTokenExpiry(row)
   if ((seconds === null || seconds <= 0) && row?.session_token_valid) return 'warning'
   if (seconds === null || seconds <= 0) return 'danger'
@@ -354,7 +361,7 @@ const splitTokenInputs = (raw: string) => {
 const handleAdd = async () => {
   const tokens = splitTokenInputs(tokenInput.value)
   if (tokens.length === 0) {
-    MessagePlugin.warning('请输入至少一个 Token')
+    MessagePlugin.warning(t('请输入至少一个 Token'))
     return
   }
 
@@ -366,9 +373,9 @@ const handleAdd = async () => {
 
   if (data) {
     if (data.errors?.length) {
-      MessagePlugin.warning(data.message || `部分添加成功，失败 ${data.errors.length} 个`)
+      MessagePlugin.warning(data.message || t('部分添加成功，失败 {0} 个', [data.errors.length]))
     } else {
-      MessagePlugin.success(data.message || '添加成功')
+      MessagePlugin.success(data.message || t('添加成功'))
     }
     addDialogVisible.value = false
     fetchData()
@@ -384,7 +391,7 @@ const handleEdit = async () => {
   submitLoading.value = false
 
   if (data) {
-    MessagePlugin.success('更新成功')
+    MessagePlugin.success(t('更新成功'))
     editDialogVisible.value = false
     fetchData()
   }
@@ -400,18 +407,19 @@ const mergeTokenCheckResults = (results: any[]) => {
 }
 
 const summarizeTokenCheck = (results: any[]) => {
-  if (results.length === 0) return '没有可检测的账号'
+  if (results.length === 0) return t('没有可检测的账号')
   if (results.length === 1) {
-    return `AccessToken剩余：${formatTokenRemaining(results[0])}`
+    return t('AccessToken剩余：{0}', [formatTokenRemaining(results[0])])
   }
-  const expiredCount = results.filter(item => item.expired).length
-  return `检测完成：${results.length}个账号，AccessToken已过期${expiredCount}个`
+  const expiredCount = results.filter(item => item.expired === true).length
+  const unavailableCount = results.filter(item => item.access_token_valid !== true).length
+  return t('检测完成：{0} 个账号，AccessToken 不可用 {1} 个，已过期 {2} 个', [results.length, unavailableCount, expiredCount])
 }
 
 const handleCheckTokenExpiry = async (row?: any) => {
   const ids = row ? [row.id] : tableData.value.map(item => item.id)
   if (ids.length === 0) {
-    MessagePlugin.warning('当前页没有账号')
+    MessagePlugin.warning(t('当前页没有账号'))
     return
   }
 
@@ -444,7 +452,7 @@ const handleRefreshToken = async (row: any) => {
 
   if (data?.result) {
     mergeTokenCheckResults([data.result])
-    MessagePlugin.success(`刷新成功，Token剩余：${formatSeconds(data.result.remaining_seconds)}`)
+    MessagePlugin.success(t('刷新成功，Token剩余：{0}', [formatSeconds(data.result.remaining_seconds)]))
   }
 }
 
@@ -453,7 +461,7 @@ const handleDelete = async (row: any) => {
     chatgpt_username: row.chatgpt_username
   })
   if (data) {
-    MessagePlugin.success('删除成功')
+    MessagePlugin.success(t('删除成功'))
     fetchData()
   }
 }
@@ -462,7 +470,7 @@ const handleResetLoginCount = async (row: any) => {
   const data = await request('/0x/chatgpt/reset-login-count', 'POST', { id: row.id })
   if (data) {
     row.login_count = 0
-    MessagePlugin.success(data.message || '被登录次数已重置')
+    MessagePlugin.success(data.message || t('被登录次数已重置'))
   }
 }
 </script>

@@ -1,14 +1,14 @@
 <template>
-  <div class="moderation-page">
+  <div class="workspace-page settings-page moderation-page">
     <t-card
-      title="政治敏感内容屏蔽"
-      subtitle="在消息转发给 ChatGPT 上游前，通过独立后端模型进行判定"
+      :title="t('政治敏感内容屏蔽')"
+      :subtitle="t('在消息转发给 ChatGPT 上游前，通过独立后端模型进行判定')"
       :bordered="false"
     >
       <div class="status-row">
         <div>
-          <div class="status-title">启用内容审查</div>
-          <div class="status-description">仅命中国家、政党、战争等候选词的用户消息会送审；审查服务故障时阻止发送。</div>
+          <div class="status-title">{{ t('启用内容审查') }}</div>
+          <div class="status-description">{{ t('仅命中国家、政党、战争等候选词的用户消息会送审；审查服务故障时阻止发送。') }}</div>
         </div>
         <t-switch v-model="form.enabled" />
       </div>
@@ -16,23 +16,21 @@
       <t-divider />
 
       <t-form :data="form" label-width="132px" class="moderation-form">
-        <t-form-item label="审查强度" name="mode">
-          <t-radio-group v-model="form.mode" variant="default-filled">
-            <t-radio-button value="relaxed">宽松版</t-radio-button>
-            <t-radio-button value="strict">严格版</t-radio-button>
+        <t-form-item :label="t('审查强度')" name="mode">
+          <t-radio-group v-model="form.mode" variant="outline">
+            <t-radio-button value="relaxed">{{ t('宽松版') }}</t-radio-button>
+            <t-radio-button value="strict">{{ t('严格版') }}</t-radio-button>
           </t-radio-group>
           <template #help>
             <span class="field-help">
-              {{ form.mode === 'relaxed'
-                ? '允许普通地理、旅行和中立事实讨论，以及不站队的历史与趋势分析；拒绝政治站队、归责说服、煽动仇恨和现实争议定性。'
-                : '国家名和地理位置可正常询问；仅当主要意图实质涉及现实政治、政府政党、战争军事、领土主权或外交制裁时拒绝。' }}
+              {{ form.mode === 'relaxed' ? t('允许普通地理、旅行和中立事实讨论，以及不站队的历史与趋势分析；拒绝政治站队、归责说服、煽动仇恨和现实争议定性。') : t('国家名和地理位置可正常询问；仅当主要意图实质涉及现实政治、政府政党、战争军事、领土主权或外交制裁时拒绝。') }}
             </span>
           </template>
         </t-form-item>
 
-        <t-form-item label="API 格式" name="protocol">
+        <t-form-item :label="t('API 格式')" name="protocol">
           <t-select v-model="form.protocol" @change="applyProtocolDefault">
-            <t-option v-for="item in protocolOptions" :key="item.value" :value="item.value" :label="item.label" />
+            <t-option v-for="item in protocolOptions" :key="item.value" :value="item.value" :label="t(item.label)" />
           </t-select>
         </t-form-item>
 
@@ -43,64 +41,64 @@
           </template>
         </t-form-item>
 
-        <t-form-item label="模型" name="model">
+        <t-form-item :label="t('模型')" name="model">
           <t-input v-model="form.model" clearable :placeholder="activeProtocol.modelPlaceholder" />
         </t-form-item>
 
-        <t-form-item label="API 密钥" name="api_key">
-          <t-input v-model="form.api_key" type="password" clearable placeholder="留空表示继续使用已保存的密钥" />
+        <t-form-item :label="t('API 密钥')" name="api_key">
+          <t-input v-model="form.api_key" type="password" clearable :placeholder="t('留空表示继续使用已保存的密钥')" />
           <template #help>
             <span class="field-help">
-              密钥只提交给 Gateway 并加密保存；
+              {{ t('密钥只提交给 Gateway 并加密保存；') }}
               <t-tag size="small" :theme="apiKeyConfigured ? 'success' : 'default'" variant="light">
-                {{ apiKeyConfigured ? '已配置' : '未配置' }}
+                {{ apiKeyConfigured ? t('已配置') : t('未配置') }}
               </t-tag>
             </span>
           </template>
         </t-form-item>
 
-        <t-form-item label="自定义限制词" name="custom_terms">
+        <t-form-item :label="t('自定义限制词')" name="custom_terms">
           <t-textarea
             v-model="form.custom_terms"
             :autosize="{ minRows: 4, maxRows: 8 }"
-            placeholder="每行或用逗号分隔一个词，最多 200 个"
+            :placeholder="t('每行或用逗号分隔一个词，最多 200 个')"
           />
           <template #help>
-            <span class="field-help">自定义词会追加到内置候选词；命中后才调用审查模型，不会直接判定违规。</span>
+            <span class="field-help">{{ t('自定义词会追加到内置候选词；命中后才调用审查模型，不会直接判定违规。') }}</span>
           </template>
         </t-form-item>
 
-        <t-form-item label="单用户审查频率">
+        <t-form-item :label="t('单用户审查频率')">
           <div class="rate-limit-grid">
             <label>
-              <span>每分钟</span>
+              <span>{{ t('每分钟') }}</span>
               <t-input-number v-model="form.limit_per_minute" :min="1" :max="10000" theme="normal" />
             </label>
             <label>
-              <span>每五分钟</span>
+              <span>{{ t('每五分钟') }}</span>
               <t-input-number v-model="form.limit_per_five_minutes" :min="1" :max="10000" theme="normal" />
             </label>
             <label>
-              <span>每小时</span>
+              <span>{{ t('每小时') }}</span>
               <t-input-number v-model="form.limit_per_hour" :min="1" :max="10000" theme="normal" />
             </label>
           </div>
           <template #help>
-            <span class="field-help">只统计实际调用审查模型的消息；达到任一上限后，本次发送会被阻止。</span>
+            <span class="field-help">{{ t('只统计实际调用审查模型的消息；达到任一上限后，本次发送会被阻止。') }}</span>
           </template>
         </t-form-item>
 
         <t-form-item>
           <t-space>
-            <t-button variant="outline" :loading="testing" @click="testConnection">验证模型与规则</t-button>
-            <t-button theme="primary" :loading="saving" @click="saveConfig">保存配置</t-button>
+            <t-button variant="outline" :loading="testing" @click="testConnection">{{ t('验证模型与规则') }}</t-button>
+            <t-button theme="primary" :loading="saving" @click="saveConfig">{{ t('保存配置') }}</t-button>
           </t-space>
         </t-form-item>
       </t-form>
 
       <t-alert
         theme="warning"
-        message="审查模型只接收命中候选词的本次用户文本。请使用专门的低权限密钥；不要把 ChatGPT 账号 AccessToken 或 SessionToken 填到这里。"
+        :message="t('审查模型只接收命中候选词的本次用户文本。请使用专门的低权限密钥；不要把 ChatGPT 账号 AccessToken 或 SessionToken 填到这里。')"
       />
     </t-card>
   </div>
@@ -110,6 +108,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t } = useWorkspaceCopy()
 
 type Protocol = 'openai_chat' | 'anthropic_messages' | 'gemini_generate_content' | 'openai_responses'
 
@@ -192,19 +193,19 @@ const applyProtocolDefault = () => {
 
 const validate = () => {
   if (!form.base_url.trim()) {
-    MessagePlugin.warning('请输入 Base URL')
+    MessagePlugin.warning(t('请输入 Base URL'))
     return false
   }
   if (!form.model.trim()) {
-    MessagePlugin.warning('请输入模型名称')
+    MessagePlugin.warning(t('请输入模型名称'))
     return false
   }
   if (!form.api_key.trim() && !apiKeyConfigured.value) {
-    MessagePlugin.warning('请输入 API 密钥')
+    MessagePlugin.warning(t('请输入 API 密钥'))
     return false
   }
   if (form.limit_per_minute > form.limit_per_five_minutes || form.limit_per_five_minutes > form.limit_per_hour) {
-    MessagePlugin.warning('频率限制必须满足：每分钟 ≤ 每五分钟 ≤ 每小时')
+    MessagePlugin.warning(t('频率限制必须满足：每分钟 ≤ 每五分钟 ≤ 每小时'))
     return false
   }
   return true
@@ -246,7 +247,7 @@ const saveConfig = async () => {
   if (!data) return
   apiKeyConfigured.value = Boolean(data.api_key_configured)
   form.api_key = ''
-  MessagePlugin.success(form.enabled ? '配置已验证并启用' : '配置已保存，审查未启用')
+  MessagePlugin.success(form.enabled ? t('配置已验证并启用') : t('配置已保存，审查未启用'))
 }
 
 onMounted(loadConfig)

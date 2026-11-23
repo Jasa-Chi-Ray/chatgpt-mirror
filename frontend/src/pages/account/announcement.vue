@@ -1,44 +1,44 @@
 <template>
-  <div>
-    <t-card title="公告" subtitle="向所有用户或指定用户发布登录公告" :bordered="false">
+  <div class="workspace-page data-page editorial-page">
+    <t-card :title="t('公告')" :subtitle="t('向所有用户或指定用户发布登录公告')" :bordered="false">
       <template #actions>
         <t-space>
-          <t-button variant="outline" :loading="loading" @click="fetchData">刷新</t-button>
+          <t-button variant="outline" :loading="loading" @click="fetchData">{{ t('刷新') }}</t-button>
           <t-button theme="primary" @click="showCreateDialog">
             <template #icon><t-icon name="add" /></template>
-            发布公告
+            {{ t('发布公告') }}
           </t-button>
         </t-space>
       </template>
 
-      <t-tabs v-model="activeListTab" class="announcement-tabs">
-        <t-tab-panel value="current" :label="`当前公告 (${currentAnnouncements.length})`" />
-        <t-tab-panel value="scheduled" :label="`待发布 (${scheduledAnnouncements.length})`" />
-        <t-tab-panel value="history" :label="`历史公告 (${historyAnnouncements.length})`" />
-      </t-tabs>
+      <PanelTabs v-model="activeListTab" class="announcement-tabs" :label="t('公告')" :items="[
+        { value: 'current', label: t('当前公告 ({0})', [currentAnnouncements.length]) },
+        { value: 'scheduled', label: t('待发布 ({0})', [scheduledAnnouncements.length]) },
+        { value: 'history', label: t('历史公告 ({0})', [historyAnnouncements.length]) },
+      ]" />
 
-      <t-table :data="visibleAnnouncements" :columns="columns" :loading="loading" row-key="id">
+      <t-table :data="visibleAnnouncements" :columns="labels(columns)" :loading="loading" row-key="id">
         <template #scope="{ row }">
           <t-tag :theme="row.scope === 'global' ? 'primary' : 'warning'" variant="light">
-            {{ row.scope === 'global' ? '全局公告' : '个人公告' }}
+            {{ row.scope === 'global' ? t('全局公告') : t('个人公告') }}
           </t-tag>
         </template>
         <template #target="{ row }">
-          {{ row.scope === 'global' ? '所有用户' : row.target_username || '-' }}
+          {{ row.scope === 'global' ? t('所有用户') : row.target_username || '-' }}
         </template>
         <template #content="{ row }">
           <span class="content-preview">{{ row.content }}</span>
         </template>
         <template #status="{ row }">
           <t-space :size="4">
-            <t-tag :theme="statusMeta(row.status).theme">{{ statusMeta(row.status).label }}</t-tag>
-            <t-tag v-if="row.block_chatgpt_login" theme="danger" variant="light">阻止登录</t-tag>
+            <t-tag :theme="statusMeta(row.status).theme">{{ t(statusMeta(row.status).label) }}</t-tag>
+            <t-tag v-if="row.block_chatgpt_login" theme="danger" variant="light">{{ t('阻止登录') }}</t-tag>
           </t-space>
         </template>
         <template #schedule="{ row }">
           <div class="schedule-cell">
             <span>{{ formatDate(row.start_at, row.display_timezone) }}</span>
-            <span>至 {{ row.end_at ? formatDate(row.end_at, row.display_timezone) : '长期' }}</span>
+            <span>{{ t('至') }} {{ row.end_at ? formatDate(row.end_at, row.display_timezone) : t('长期') }}</span>
             <small>{{ row.display_timezone }}</small>
           </div>
         </template>
@@ -47,49 +47,49 @@
         </template>
         <template #op="{ row }">
           <t-space>
-            <t-link theme="primary" @click="showEditDialog(row)">编辑</t-link>
+            <t-link theme="primary" @click="showEditDialog(row)">{{ t('编辑') }}</t-link>
             <t-link theme="primary" @click="toggleAnnouncement(row)">
-              {{ row.is_active ? '停用' : '启用' }}
+              {{ row.is_active ? t('停用') : t('启用') }}
             </t-link>
-            <t-popconfirm content="确定删除该公告吗？" @confirm="deleteAnnouncement(row)">
-              <t-link theme="danger">删除</t-link>
+            <t-popconfirm :content="t('确定删除该公告吗？')" @confirm="deleteAnnouncement(row)">
+              <t-link theme="danger">{{ t('删除') }}</t-link>
             </t-popconfirm>
           </t-space>
         </template>
       </t-table>
 
-      <t-empty v-if="!loading && visibleAnnouncements.length === 0" description="当前分类暂无公告" />
+      <t-empty v-if="!loading && visibleAnnouncements.length === 0" :description="t('当前分类暂无公告')" />
     </t-card>
 
     <t-dialog
       :visible="dialogVisible"
-      :header="isEdit ? '编辑公告' : '发布公告'"
-      :confirm-btn="{ content: isEdit ? '保存' : '发布', loading: saving }"
+      :header="isEdit ? t('编辑公告') : t('发布公告')"
+      :confirm-btn="{ content: isEdit ? t('保存') : t('发布'), loading: saving }"
       width="1040px"
       @confirm="saveAnnouncement"
       @close="dialogVisible = false"
     >
       <t-form :data="formData" label-width="92px">
-        <t-form-item label="标题" name="title">
+        <t-form-item :label="t('标题')" name="title">
           <t-input
             v-model="formData.title"
             :maxlength="120"
             show-limit-number
-            placeholder="请输入公告标题"
+            :placeholder="t('请输入公告标题')"
           />
         </t-form-item>
-        <t-form-item label="发布范围" name="scope">
-          <t-radio-group v-model="formData.scope" variant="default-filled">
-            <t-radio-button value="global">所有用户</t-radio-button>
-            <t-radio-button value="personal">指定用户</t-radio-button>
+        <t-form-item :label="t('发布范围')" name="scope">
+          <t-radio-group v-model="formData.scope" variant="outline">
+            <t-radio-button value="global">{{ t('所有用户') }}</t-radio-button>
+            <t-radio-button value="personal">{{ t('指定用户') }}</t-radio-button>
           </t-radio-group>
         </t-form-item>
-        <t-form-item v-if="formData.scope === 'personal'" label="目标用户" name="target_user_id">
+        <t-form-item v-if="formData.scope === 'personal'" :label="t('目标用户')" name="target_user_id">
           <t-select
             v-model="formData.target_user_id"
             filterable
             clearable
-            placeholder="请选择用户"
+            :placeholder="t('请选择用户')"
           >
             <t-option
               v-for="user in userOptions"
@@ -100,7 +100,7 @@
           </t-select>
         </t-form-item>
         <div class="schedule-form-grid">
-          <t-form-item label="显示时区" name="display_timezone">
+          <t-form-item :label="t('显示时区')" name="display_timezone">
             <t-select v-model="formData.display_timezone" filterable>
               <t-option
                 v-for="timezone in timezoneOptions"
@@ -110,62 +110,62 @@
               />
             </t-select>
           </t-form-item>
-          <t-form-item label="开始时间" name="start_at">
+          <t-form-item :label="t('开始时间')" name="start_at">
             <t-date-picker
               v-model="formData.start_at"
               enable-time-picker
               clearable
               format="YYYY-MM-DD HH:mm:ss"
               value-type="YYYY-MM-DD HH:mm:ss"
-              placeholder="留空表示立即开始"
+              :placeholder="t('留空表示立即开始')"
             />
           </t-form-item>
-          <t-form-item label="结束时间" name="end_at">
+          <t-form-item :label="t('结束时间')" name="end_at">
             <t-date-picker
               v-model="formData.end_at"
               enable-time-picker
               clearable
               format="YYYY-MM-DD HH:mm:ss"
               value-type="YYYY-MM-DD HH:mm:ss"
-              placeholder="留空表示长期有效"
+              :placeholder="t('留空表示长期有效')"
             />
           </t-form-item>
         </div>
-        <t-form-item label="公告内容" name="content">
+        <t-form-item :label="t('公告内容')" name="content">
           <div class="announcement-editor">
             <div class="announcement-editor__input">
-              <div class="editor-pane-title">Markdown 编辑</div>
+              <div class="editor-pane-title">{{ t('Markdown 编辑') }}</div>
               <t-textarea
                 v-model="formData.content"
                 :maxlength="10000"
                 :autosize="{ minRows: 12, maxRows: 16 }"
-                placeholder="请输入 Markdown 格式的公告内容"
+                :placeholder="t('请输入 Markdown 格式的公告内容')"
               />
               <div class="form-help">
-                支持标题、列表、链接、引用、代码块、表格和图片；原始 HTML 不会执行。
+                {{ t('支持标题、列表、链接、引用、代码块、表格和图片；原始 HTML 不会执行。') }}
               </div>
             </div>
-            <section class="announcement-editor__preview" aria-label="公告实时预览">
-              <div class="editor-pane-title">实时预览</div>
+            <section class="announcement-editor__preview" :aria-label="t('公告实时预览')">
+              <div class="editor-pane-title">{{ t('实时预览') }}</div>
               <div class="announcement-preview">
                 <h3 v-if="formData.title.trim()" class="preview-title">{{ formData.title }}</h3>
-                <div v-else class="preview-placeholder">公告标题将显示在这里</div>
+                <div v-else class="preview-placeholder">{{ t('公告标题将显示在这里') }}</div>
                 <MarkdownContent v-if="formData.content.trim()" :content="formData.content" />
-                <div v-else class="preview-placeholder">开始输入后，此处将实时显示公告内容。</div>
+                <div v-else class="preview-placeholder">{{ t('开始输入后，此处将实时显示公告内容。') }}</div>
               </div>
             </section>
           </div>
         </t-form-item>
-        <t-form-item label="立即发布" name="is_active">
+        <t-form-item :label="t('立即发布')" name="is_active">
           <t-switch v-model="formData.is_active" />
           <template #help>
-            <span class="form-help">启用后仅在设定的开始和结束时间内作为当前公告展示；到期后自动进入历史公告。</span>
+            <span class="form-help">{{ t('启用后仅在设定的开始和结束时间内作为当前公告展示；到期后自动进入历史公告。') }}</span>
           </template>
         </t-form-item>
-        <t-form-item label="阻止登录" name="block_chatgpt_login">
+        <t-form-item :label="t('阻止登录')" name="block_chatgpt_login">
           <t-switch v-model="formData.block_chatgpt_login" />
           <template #help>
-            <span class="form-help">公告生效期间，{{ formData.scope === 'global' ? '所有用户' : '目标用户' }}不能进入 ChatGPT；已有 ChatGPT 会话也会立即失效。站点账号仍可登录查看公告。</span>
+            <span class="form-help">{{ t('公告生效期间，') }}{{ formData.scope === 'global' ? t('所有用户') : t('目标用户') }}{{ t('不能进入 ChatGPT；已有 ChatGPT 会话也会立即失效。站点账号仍可登录查看公告。') }}</span>
           </template>
         </t-form-item>
       </t-form>
@@ -178,6 +178,10 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
 import MarkdownContent from '@/components/MarkdownContent.vue'
+import PanelTabs from '@/components/PanelTabs.vue'
+import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+
+const { t, labels, language } = useWorkspaceCopy()
 
 type AnnouncementScope = 'global' | 'personal'
 
@@ -320,22 +324,22 @@ const announcementPayload = (overrides: Partial<Announcement> = {}) => ({
 
 const validateForm = () => {
   if (!formData.title.trim()) {
-    MessagePlugin.warning('请输入公告标题')
+    MessagePlugin.warning(t('请输入公告标题'))
     return false
   }
   if (!formData.content.trim()) {
-    MessagePlugin.warning('请输入公告内容')
+    MessagePlugin.warning(t('请输入公告内容'))
     return false
   }
   if (formData.scope === 'personal' && !formData.target_user_id) {
-    MessagePlugin.warning('请选择目标用户')
+    MessagePlugin.warning(t('请选择目标用户'))
     return false
   }
   if (formData.start_at && formData.end_at) {
     const start = zonedDateTimeToIso(formData.start_at, formData.display_timezone)
     const end = zonedDateTimeToIso(formData.end_at, formData.display_timezone)
     if (new Date(end).getTime() <= new Date(start).getTime()) {
-      MessagePlugin.warning('结束时间必须晚于开始时间')
+      MessagePlugin.warning(t('结束时间必须晚于开始时间'))
       return false
     }
   }
@@ -354,7 +358,7 @@ const saveAnnouncement = async () => {
   saving.value = false
   if (!data) return
 
-  MessagePlugin.success(isEdit.value ? '公告已更新' : '公告已发布')
+  MessagePlugin.success(isEdit.value ? t('公告已更新') : t('公告已发布'))
   dialogVisible.value = false
   await fetchData()
 }
@@ -374,7 +378,7 @@ const toggleAnnouncement = async (row: Announcement) => {
   })
   if (!data) return
 
-  MessagePlugin.success(row.is_active ? '公告已停用' : '公告已启用')
+  MessagePlugin.success(row.is_active ? t('公告已停用') : t('公告已启用'))
   await fetchData()
 }
 
@@ -382,7 +386,7 @@ const deleteAnnouncement = async (row: Announcement) => {
   const data = await request('/0x/user/announcements', 'DELETE', { id: row.id })
   if (!data) return
 
-  MessagePlugin.success('公告已删除')
+  MessagePlugin.success(t('公告已删除'))
   await fetchData()
 }
 
@@ -395,7 +399,7 @@ const statusMeta = (status: Announcement['status']) => ({
 
 const formatDate = (value: string, timeZone = 'Asia/Shanghai') => {
   if (!value) return '-'
-  return new Date(value).toLocaleString('zh-CN', { hour12: false, timeZone })
+  return new Date(value).toLocaleString(language.value, { hour12: false, timeZone })
 }
 
 const formatDateInput = (value: string, timeZone: string) => {

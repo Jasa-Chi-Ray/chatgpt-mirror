@@ -6,13 +6,15 @@ from app.accounts.views import UserAccountView, UserRelateGPTCarView, VisitLogVi
 from app.accounts.views import BatchUserActionView, CurrentUserView, ChangePasswordView, QuotaView, OperationsOverviewView
 from app.accounts.views import ConversationTitlePrivacyView, UserConversationStatisticsView, UserSessionRevokeView
 from app.accounts.views import UserCapabilityPolicyView, UserModelPolicyView
-from app.accounts.views.login import AccountLogin, AccountLogout, UserFreeLoginView, AccountRegister, ConfirmLogin
+from app.accounts.views.login import AccountLogin, AccountLogout, UserFreeLoginView, AccountRegister, ConfirmLogin, GatewayLogoutView, LoginStatusView, LoginGuardView
 from app.accounts.session_authority import GatewayAuthorizationView
 from app.accounts.views.cfg import VersionConfig, AccessControlView, PoliticalModerationConfigView, PoliticalModerationTestView
 from app.accounts.views.backup import UnifiedBackupView
 from app.accounts.views.announcements import AnnouncementAdminView, CurrentAnnouncementView
 
 urlpatterns = [
+    path("login-status", LoginStatusView.as_view()),
+    path("login-guard", LoginGuardView.as_view()),
     path("", UserAccountView.as_view()),
     path("version-cfg", VersionConfig.as_view()),
     path("get-mirror-token", GetMirrorToken.as_view()),
@@ -27,6 +29,7 @@ urlpatterns = [
     path("login", AccountLogin.as_view()),
     path("login-confirm", ConfirmLogin.as_view()),
     path("gateway-authorization", GatewayAuthorizationView.as_view()),
+    path("gateway-logout", GatewayLogoutView.as_view()),
     path("logout", AccountLogout.as_view()),
     path("visit-log", VisitLogView.as_view()),
     path("access-control", AccessControlView.as_view()),

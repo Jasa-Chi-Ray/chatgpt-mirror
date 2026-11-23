@@ -31,12 +31,9 @@ def generate_md5(input_string):
     return md5_object.hexdigest()
 
 def get_client_ip(request):
+    # Gateway strips untrusted forwarding headers and supplies one resolved address.
     candidates = (
         request.META.get("HTTP_X_CHATGPT_MIRROR_CLIENT_IP"),
-        request.META.get("HTTP_CF_CONNECTING_IP"),
-        request.META.get("HTTP_TRUE_CLIENT_IP"),
-        request.META.get("HTTP_X_REAL_IP"),
-        request.META.get("HTTP_X_FORWARDED_FOR"),
         request.META.get("REMOTE_ADDR"),
     )
     for candidate in candidates:
