@@ -286,3 +286,8 @@ if DJANGO_ENV == "PRODUCTION":
 else:  # if DJANGO_ENV == "LOCAL":
     # 本地开发 环境
     from app.config.local import *
+
+# OAuth client credentials stay in the management service environment.
+from app.accounts.linuxdo_config import load_linuxdo
+(LINUXDO_OAUTH_ENABLED, LINUXDO_CLIENT_ID, LINUXDO_CLIENT_SECRET,
+ LINUXDO_REDIRECT_URI, LINUXDO_MIN_TRUST_LEVEL) = load_linuxdo(LOCAL_NETWORK_ACCESS)

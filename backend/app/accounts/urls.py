@@ -12,7 +12,15 @@ from app.accounts.views.cfg import VersionConfig, AccessControlView, PoliticalMo
 from app.accounts.views.backup import UnifiedBackupView
 from app.accounts.views.announcements import AnnouncementAdminView, CurrentAnnouncementView
 
+from app.accounts.views.linuxdo import (LinuxDOStartView, LinuxDOCallbackView,
+    LinuxDOCompleteView, LinuxDOBindLoginView, LinuxDOConnectionView)
+
 urlpatterns = [
+    path("oauth/linuxdo/start", LinuxDOStartView.as_view()),
+    path("oauth/linuxdo/callback", LinuxDOCallbackView.as_view()),
+    path("oauth/linuxdo/complete", LinuxDOCompleteView.as_view()),
+    path("oauth/linuxdo/bind-login", LinuxDOBindLoginView.as_view()),
+    path("oauth/linuxdo/connection", LinuxDOConnectionView.as_view()),
     path("login-status", LoginStatusView.as_view()),
     path("login-guard", LoginGuardView.as_view()),
     path("", UserAccountView.as_view()),

@@ -1,4 +1,5 @@
 import json
+import re
 import time
 
 from django.contrib.admin.models import LogEntry
@@ -16,7 +17,7 @@ from rest_framework.views import APIView
 
 from app.permissions import IsSuperUser
 
-from app.accounts.models import Announcement, User, VisitLog, LoginSession
+from app.accounts.models import Announcement, User, VisitLog, LoginSession, OAuthIdentity, OAuthFlow
 from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.fields import decrypt_value, encrypt_value
 from app.utils import req_gateway
@@ -176,6 +177,12 @@ def _export_django_data():
             {"key": token.key, "username": token.user.username, "created": _iso(token.created)}
             for token in LoginSession.objects.select_related("user").order_by("key")
         ],
+        "oauth_identities": [
+            {"provider": item.provider, "subject": item.subject,
+             "username": item.username, "local_username": item.user.username,
+             "created_at": _iso(item.created_at)}
+            for item in OAuthIdentity.objects.select_related("user").order_by("id")
+        ],
         "sessions": [
             {
                 "session_key": item.session_key,
@@ -283,6 +290,7 @@ def _restore_complete_django(payload):
         LoginSession.objects.all().delete()
         Session.objects.all().delete()
         VisitLog.objects.all().delete()
+        OAuthFlow.objects.all().delete()
         User.objects.all().delete()
         Group.objects.all().delete()
         ChatgptCar.objects.all().delete()
@@ -315,6 +323,25 @@ def _restore_complete_django(payload):
             user.groups.set(_resolve_named_items(group_names, groups, "用户组"))
             user.user_permissions.set(_resolve_named_items(permission_keys, permissions, "权限"))
             users[user.username] = user
+
+        identities = payload.get("oauth_identities", [])
+        if not isinstance(identities, list):
+            raise ValidationError({"archive": "第三方账号绑定数据无效"})
+        subjects, owners = set(), set()
+        for raw in identities:
+            if not isinstance(raw, dict):
+                raise ValidationError({"archive": "第三方账号绑定数据无效"})
+            provider, subject = raw.get("provider"), raw.get("subject")
+            owner, username = raw.get("local_username"), raw.get("username", "")
+            if (provider != "linuxdo" or not isinstance(subject, str)
+                    or not re.fullmatch(r"[1-9][0-9]{0,19}", subject)
+                    or owner not in users or not isinstance(username, str) or len(username) > 150
+                    or subject in subjects or owner in owners):
+                raise ValidationError({"archive": "第三方账号绑定数据无效或重复"})
+            subjects.add(subject)
+            owners.add(owner)
+            OAuthIdentity.objects.create(provider=provider, subject=subject, user=users[owner],
+                username=username, created_at=_parse_datetime(raw.get("created_at"), fallback=timezone.now()))
 
         for raw in payload["announcements"]:
             data = dict(raw)

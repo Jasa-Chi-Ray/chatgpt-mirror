@@ -25,6 +25,9 @@
           <div v-if="cfg.notice" class="login-notice" role="status">
             {{ cfg.notice }}
           </div>
+          <div v-if="oauthBindingResult" class="login-notice" role="status">
+            {{ copy.bindDescription(oauthUsername) }}
+          </div>
 
           <p v-if="remainingSeconds > 0" class="login-cooldown" role="status" aria-live="polite">{{ copy.cooldown(remainingSeconds) }}</p>
           <div v-if="verificationError" class="login-cooldown" role="alert">
@@ -105,6 +108,17 @@
             </t-form>
           </div>
 
+          <button
+            v-if="cfg.linuxdo_enabled && !isRegister && !oauthBindingResult"
+            class="free-button linuxdo-button"
+            type="button"
+            :disabled="loading || Boolean(verificationError) || remainingSeconds > 0 || (turnstileEnabled && !turnstileToken)"
+            @click="loginWithLinuxDO"
+          >
+            <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><defs><clipPath id="linuxdo-login-clip"><circle cx="16" cy="16" r="15" /></clipPath></defs><g clip-path="url(#linuxdo-login-clip)"><path fill="#1c1c1e" d="M0 0h32v11H0z"/><path fill="#fff" d="M0 11h32v10H0z"/><path fill="#ffb003" d="M0 21h32v11H0z"/></g><circle cx="16" cy="16" r="15" fill="none" stroke="currentColor" stroke-opacity=".2"/></svg>
+            <span>{{ copy.linuxdo }}</span>
+          </button>
+
           <p class="account-switch" :class="{ 'account-switch--busy': loading }" :inert="loading">
             <template v-if="isRegister">
               {{ copy.hasAccount }}
@@ -150,6 +164,7 @@ import { useUserStore } from '@/store/user'
 import { animateWindowClosing, queueWindowOpening, takeWindowOpening } from '@/layouts/window-opening'
 import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { getLoginCooldown, LoginCoolingError, LoginVerificationError } from '@/api/login-guard'
+import { linuxdoError } from '@/api/linuxdo'
 import LoginRocket from './LoginRocket.vue'
 import { englishLoginMessages, loginCopy } from './copy'
 import { changeThemeWithLiquid } from './liquid-theme'
@@ -238,6 +253,8 @@ const refreshLoginState = async () => {
   } catch (error: any) { verificationError.value = error.message || '登录状态暂时不可用，请重新检测。' }
 }
 const loading = ref(false)
+const oauthBindingResult = ref('')
+const oauthUsername = ref('')
 const progressAction = ref<'login' | 'free' | null>(null)
 const progressComplete = ref(false)
 const route = useRoute()
@@ -256,6 +273,7 @@ declare global {
 
 const cfg = ref({
   show_github: true,
+  linuxdo_enabled: false,
   notice: '',
   turnstile_enabled: false,
   turnstile_site_key: ''
@@ -386,10 +404,30 @@ onMounted(async () => {
       MessagePlugin.error(translatedMessage(error.message || '退出未完成，请重试'))
     }
   }
+  const oauthResult = route.query.linuxdo_result
+  const oauthError = route.query.linuxdo_error
+  if (oauthResult || oauthError) {
+    // Remove the one-time ticket from the fragment before making any requests.
+    await router.replace({ path: route.path, query: {} })
+  }
   await refreshLoginState()
+  if (oauthError) MessagePlugin.error(translatedMessage(linuxdoError(oauthError)))
+  if (typeof oauthResult === 'string') {
+    loading.value = true
+    try {
+      const data = await userStore.completeLinuxDO(oauthResult)
+      if (data.requires_binding) {
+        oauthBindingResult.value = oauthResult
+        oauthUsername.value = data.linuxdo_username
+      } else if (data.authenticated) await openAfterLogin(Boolean(data.is_admin))
+    } catch (error: any) { handleOAuthError(error) }
+    finally { loading.value = false }
+  }
 })
 
 watch(isRegister, async () => {
+  oauthBindingResult.value = ''
+  oauthUsername.value = ''
   if (turnstileEnabled.value) {
     removeTurnstile()
     await renderTurnstile()
@@ -447,7 +485,8 @@ const onSubmit = async ({ validateResult }: any) => {
     const submittedTurnstileToken = turnstileToken.value
     const submittedInvalidationRevision = turnstileInvalidationRevision
     try {
-      const url = isRegister.value ? '/0x/user/register' : '/0x/user/login'
+      const url = oauthBindingResult.value ? '/0x/user/oauth/linuxdo/bind-login'
+        : isRegister.value ? '/0x/user/register' : '/0x/user/login'
       const credentials = isRegister.value
         ? {
             username: loginForm.username,
@@ -460,6 +499,7 @@ const onSubmit = async ({ validateResult }: any) => {
           }
       const data = await userStore.login(url, {
         ...credentials,
+        ...(oauthBindingResult.value ? { result: oauthBindingResult.value } : {}),
         turnstile_token: submittedTurnstileToken
       }, () => {
         if (turnstileEnabled.value && turnstileInvalidationRevision !== submittedInvalidationRevision) {
@@ -479,6 +519,25 @@ const onSubmit = async ({ validateResult }: any) => {
       progressComplete.value = false
       loading.value = false
     }
+  }
+}
+
+const handleOAuthError = (error: any) => {
+  if (error instanceof LoginCoolingError) { applyCooldown(error.remainingSeconds); removeTurnstile() }
+  else if (error instanceof LoginVerificationError) { verificationError.value = error.message; removeTurnstile() }
+  else MessagePlugin.error(translatedMessage(error.message || 'Linux DO 登录暂时不可用，请重试'))
+}
+
+const loginWithLinuxDO = async () => {
+  if (loading.value || verificationError.value || remainingSeconds.value > 0) return
+  loading.value = true
+  try {
+    const data = await userStore.startLinuxDO('login', turnstileToken.value)
+    window.location.assign(data.authorize_url)
+  } catch (error: any) {
+    handleOAuthError(error)
+    await renderTurnstile()
+    loading.value = false
   }
 }
 
@@ -519,6 +578,7 @@ const goFree = async () => {
 </script>
 
 <style scoped>
+.linuxdo-button { margin-top: 20px; gap: 10px; }
 .login-page {
   --login-canvas: #efefef;
   --login-panel: #fdfdfd;

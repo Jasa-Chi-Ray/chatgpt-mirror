@@ -17,6 +17,8 @@ export const loginCopy = {
     noAccount: '还没有账户？',
     or: '或',
     free: '免费体验',
+    linuxdo: '使用 Linux DO 登录',
+    bindDescription: (name: string) => `Linux DO 账号 ${name} 尚未绑定。请输入现有镜像账号的用户名和密码，完成绑定并登录。管理员账号同样适用。`,
     retry: '重新检测',
     cooldown: (seconds: number) => `登录暂时冷却，请在 ${seconds} 秒后重试。`,
     retryIn: (seconds: number) => `${seconds} 秒后重试`,
@@ -42,6 +44,8 @@ export const loginCopy = {
     noAccount: 'New here?',
     or: 'or',
     free: 'Try for free',
+    linuxdo: 'Continue with Linux DO',
+    bindDescription: (name: string) => `Linux DO account ${name} is not linked yet. Enter your existing mirror username and password to link and sign in. Administrator accounts are supported.`,
     retry: 'Check again',
     cooldown: (seconds: number) => `Sign-in is temporarily paused. Try again in ${seconds}s.`,
     retryIn: (seconds: number) => `Retry in ${seconds}s`,
@@ -52,6 +56,11 @@ export const loginCopy = {
 }
 
 export const englishLoginMessages: Readonly<Record<string, string>> = {
+  'Linux DO 授权已取消': 'Linux DO authorization was cancelled.',
+  'Linux DO 登录已过期，请重新授权': 'Linux DO sign-in has expired. Authorize again.',
+  '此 Linux DO 账号暂时无法登录本站': 'This Linux DO account cannot currently sign in to this site.',
+  'Linux DO 登录暂时不可用，请重试': 'Linux DO sign-in is temporarily unavailable. Try again.',
+  '该账号已存在其他绑定，请先解除原绑定': 'This account is already linked. Unlink the previous account first.',
   '登录状态暂时不可用，请重新检测。': 'The sign-in status is temporarily unavailable. Check again.',
   '暂时无法读取登录状态，请稍后重试': 'Unable to check the sign-in status. Try again shortly.',
   '浏览器渲染验证未完成，请重新检测。': 'Browser verification is incomplete. Check again.',

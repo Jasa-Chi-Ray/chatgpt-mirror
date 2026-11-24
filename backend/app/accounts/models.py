@@ -93,6 +93,36 @@ class PendingLogin(models.Model):
     csrf_digest = models.CharField(max_length=64)
     expires_at = models.DateTimeField(db_index=True)
     visitor = models.BooleanField(default=False)
+    oauth_identity = models.ForeignKey("OAuthIdentity", null=True, editable=False,
+        on_delete=models.CASCADE, related_name="pending_logins")
+
+
+class OAuthIdentity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="oauth_identities")
+    provider = models.CharField(max_length=20)
+    subject = models.CharField(max_length=64)
+    username = models.CharField(max_length=150, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("provider", "subject"), name="oauth_provider_subject_unique"),
+            models.UniqueConstraint(fields=("provider", "user"), name="oauth_provider_user_unique"),
+        ]
+
+
+class OAuthFlow(models.Model):
+    state_digest = models.CharField(max_length=64, primary_key=True)
+    browser_digest = models.CharField(max_length=64)
+    intent = models.CharField(max_length=10)
+    admitted_session = models.BooleanField(default=False)
+    user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    session_digest = models.CharField(max_length=64, blank=True)
+    fingerprint = models.JSONField(default=dict)
+    stage = models.CharField(max_length=12, default="started")
+    result_digest = models.CharField(max_length=64, null=True, unique=True)
+    profile = models.JSONField(default=dict)
+    expires_at = models.DateTimeField(db_index=True)
 
 
 class Announcement(models.Model):

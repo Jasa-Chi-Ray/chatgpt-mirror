@@ -2,6 +2,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
+from django.core import signing
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -105,6 +106,16 @@ class UnifiedBackupValidationTests(TestCase):
 
 
 class SecurityRegressionTests(TestCase):
+    @staticmethod
+    def login_fingerprint():
+        return {**{key: value * 64 for key, value in zip(
+            ("canvas", "webgl", "fonts", "layout"), "abcd")}, "shape": "0123456789abcdef"}
+
+    def prepare_browser_login(self, client):
+        # Login now requires the same signed rendering receipt issued to the UI.
+        response = client.post("/0x/user/login-status", {"fingerprint": self.login_fingerprint()}, format="json")
+        self.assertEqual(response.status_code, 200)
+
     def setUp(self):
         self.factory = APIRequestFactory()
 
@@ -588,6 +599,7 @@ class SecurityRegressionTests(TestCase):
     def test_admin_login_issues_csrf_cookie_for_unsafe_api_requests(self):
         User.objects.create_superuser(username="csrf-admin", password="Strong-password-123!")
         client = APIClient(enforce_csrf_checks=True)
+        self.prepare_browser_login(client)
         csrf = client.get("/0x/user/version-cfg").data["csrf_token"]
 
         login = client.post(
@@ -646,6 +658,7 @@ class SecurityRegressionTests(TestCase):
     def test_allow_all_origins_accepts_unlisted_origin_with_csrf_token(self):
         User.objects.create_superuser(username="open-origin-admin", password="Strong-password-123!")
         client = APIClient(enforce_csrf_checks=True)
+        self.prepare_browser_login(client)
         csrf = client.get("/0x/user/version-cfg").data["csrf_token"]
 
         login = client.post(
@@ -679,6 +692,7 @@ class SecurityRegressionTests(TestCase):
         results = []
         for _ in range(2):
             client = APIClient(enforce_csrf_checks=True)
+            self.prepare_browser_login(client)
             csrf = client.get("/0x/user/version-cfg").data["csrf_token"]
             prepared = client.post("/0x/user/login-free", {}, format="json", HTTP_X_CSRFTOKEN=csrf)
             results.append(client.post("/0x/user/login-confirm", {"login_ticket": prepared.data["login_ticket"]},
@@ -728,6 +742,8 @@ class SecurityRegressionTests(TestCase):
             },
             format="json",
         )
+        from app.accounts.login_guard import COOKIE, SALT
+        request.COOKIES[COOKIE] = signing.dumps(self.login_fingerprint(), salt=SALT, compress=True)
         response = AccountRegister.as_view()(request)
         self.assertEqual(response.status_code, 400)
         req_gateway.assert_not_called()

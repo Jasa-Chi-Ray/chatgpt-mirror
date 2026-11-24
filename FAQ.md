@@ -62,6 +62,40 @@ docker compose up -d
 
 `data/` 是网关数据，`backend/db/` 是管理服务数据，`backend/logs/` 是日志。更新前备份数据和密钥；复制 SQLite 文件时先停止服务，完成后再启动。不要只备份其中一个数据库。
 
+## Linux DO 登录
+
+### 怎么开启？本地能不能测试？
+
+默认关闭，必须在 `.env` 中手动设置 `LINUXDO_OAUTH_ENABLED=enable` 才启用，仅填写客户端凭据不会自动开启。先到 [Linux DO Connect](https://connect.linux.do/) 申请应用，把 Client ID、Client Secret 和登记的回调地址填入部署目录的 `.env`。对应配置已经放在 `.env.example` 和 Compose 的管理服务环境变量里。
+
+```env
+LINUXDO_OAUTH_ENABLED=enable
+LINUXDO_CLIENT_ID=你的 Client ID
+LINUXDO_CLIENT_SECRET=你的 Client Secret
+LINUXDO_REDIRECT_URI=http://127.0.0.1:40002/0x/user/oauth/linuxdo/callback
+LINUXDO_MIN_TRUST_LEVEL=0
+LOCAL_NETWORK_ACCESS=enable
+```
+
+上面是本地 HTTP 测试的写法，回调地址还需要被 Linux DO Connect 的应用配置接受。浏览器访问的主机和端口必须与回调一致，`localhost` 和 `127.0.0.1` 不要混用。正式部署使用 `https://你的域名/0x/user/oauth/linuxdo/callback`，并按前面的 HTTPS 部署说明关闭本地网络模式。修改后重新创建管理服务容器；首次使用还需要包含此功能的前端与管理服务版本。
+
+`LINUXDO_MIN_TRUST_LEVEL` 支持 0 到 4。Client Secret 只放管理服务的环境变量，不要填进前端、截图或公开反馈里。接入方式参考 [Linux DO Connect 文档](https://wiki.linux.do/Community/LinuxDoConnect)。
+
+### 是直接注册，还是绑定现有账号？
+
+由 `ALLOW_REGISTER` 决定。
+
+- `false`：第一次授权后，输入现有镜像账号的用户名和密码，完成绑定并登录。普通用户和管理员都支持。
+- `true`：未绑定的 Linux DO 账号会自动创建普通镜像用户并绑定，后续直接登录。不会因为论坛用户名与本站管理员重名而获得管理权限。
+
+已经绑定的账号按原镜像账号登录，原有权限、配额、号池和隔离配置继续生效。自动注册的新用户也默认开启隔离，管理员仍需要为其分配可用号池。系统通过论坛不可变的用户 ID 识别绑定，论坛改名不会创建另一个镜像账号，也不会按邮箱或同名账号自动关联。
+
+### 普通用户和管理员在哪里绑定？
+
+登录后进入自己的「账户中心」，在「Linux DO 登录」卡片操作即可。管理员可以从右上角账号菜单进入同一个账户中心。每个镜像账号只绑定一个 Linux DO 账号，同一个 Linux DO 账号也只能绑定一个镜像账号。
+
+卡片向本人显示绑定的论坛用户名，不在其他用户的列表里公开展示。解绑后使用本地密码登录。通过 Linux DO 自动注册的账号没有初始本地密码，需要先由管理员设置本地密码，再解除绑定，避免解绑后无法登录。统一备份会保留已完成的绑定，不包含临时授权凭证。
+
 ## 网络与反向代理
 
 ### 如何让局域网里的设备访问？

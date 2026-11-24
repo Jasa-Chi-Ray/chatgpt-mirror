@@ -153,7 +153,7 @@ const username = computed(() => (logoutIdentity.value?.username ?? userStore.use
 const pageTitle = computed(() => t(String(route.meta.title || '管理')))
 const userOptions = computed(() => {
   const options = [{ content: t('退出登录'), value: 'logout' }]
-  if (!workspaceAdmin.value) options.unshift({ content: t('账户中心'), value: 'profile' })
+  options.unshift({ content: t('账户中心'), value: 'profile' })
   return options
 })
 

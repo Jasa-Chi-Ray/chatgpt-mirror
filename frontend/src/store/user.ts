@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { linuxdoRequest } from '@/api/linuxdo'
 import { detectBrowserIp } from '@/api/browser-ip'
 import { collectLoginFingerprint, getLoginCooldown, LoginCoolingError, LoginVerificationError } from '@/api/login-guard'
 
@@ -77,10 +78,14 @@ export const useUserStore = defineStore('user', () => {
     })
 
     const prepared = await parseJsonResponse(response, '登录失败')
-    if (!prepared.login_ticket) throw new Error('登录确认无效，请重试')
     const browserIp = await browserIpPromise
     // No authenticated cookie exists before this callback accepts the current challenge.
     beforeConfirm()
+    return confirmLogin(prepared, browserIp, fingerprint)
+  }
+
+  const confirmLogin = async (prepared: any, browserIp: string | null, fingerprint: Record<string, string>) => {
+    if (!prepared.login_ticket) throw new Error('登录确认无效，请重试')
     const confirmation = await fetch('/0x/user/login-confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken.value },
@@ -89,12 +94,29 @@ export const useUserStore = defineStore('user', () => {
     const result = await parseJsonResponse(confirmation, '登录确认失败')
     
     authenticated.value = Boolean(result.authenticated)
-    setUsername(result.username || data.username || '')
+    setUsername(result.username || '')
     setIsAdmin(Boolean(result.is_admin))
     setCsrfToken(result.csrf_token || '')
     hydrated = true
 
     return result
+  }
+
+  const startLinuxDO = async (intent: 'login' | 'link', turnstileToken = '') => {
+    const seconds = await getLoginCooldown()
+    if (seconds > 0) throw new LoginCoolingError(seconds)
+    await prepareCsrf()
+    return linuxdoRequest('start', csrfToken.value, { intent, turnstile_token: turnstileToken })
+  }
+
+  const completeLinuxDO = async (ticket: string) => {
+    const seconds = await getLoginCooldown()
+    if (seconds > 0) throw new LoginCoolingError(seconds)
+    const fingerprint = await collectLoginFingerprint()
+    await prepareCsrf()
+    const prepared = await linuxdoRequest('complete', csrfToken.value, { result: ticket })
+    if (prepared.requires_binding || prepared.linked) return prepared
+    return confirmLogin(prepared, await detectBrowserIp(), fingerprint)
   }
 
   const hydrate = async () => {
@@ -140,6 +162,8 @@ export const useUserStore = defineStore('user', () => {
     setUsername,
     setCsrfToken,
     login,
+    startLinuxDO,
+    completeLinuxDO,
     hydrate,
     logout
   }

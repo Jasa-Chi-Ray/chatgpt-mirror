@@ -121,18 +121,13 @@ router.beforeEach(async (to, _from, next) => {
   const userStore = useUserStore()
   const isLoginPage = to.path === '/login' || to.path === '/login-chatgpt'
 
-  if (isLoginPage && hasChatGPTSession()) {
+  if (isLoginPage && !to.query.linuxdo_result && !to.query.linuxdo_error && hasChatGPTSession()) {
     window.location.replace('/chat')
     next(false)
     return
   }
 
   const authenticated = await userStore.hydrate()
-  if (authenticated && userStore.isAdmin && to.name === 'Profile') {
-    next('/account/overview')
-    return
-  }
-
   if (to.meta.requiresAdmin && (!authenticated || !userStore.isAdmin)) {
     clearAccessibleCookies()
     window.location.replace('/admin#/')

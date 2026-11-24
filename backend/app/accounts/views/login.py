@@ -12,7 +12,7 @@ from django.utils.dateparse import parse_datetime
 from requests.exceptions import RequestException
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
@@ -75,12 +75,13 @@ def verify_turnstile(request, expected_action):
     return min(timezone.now() + timedelta(seconds=60), challenge_time + TURNSTILE_TOKEN_MAX_AGE)
 
 
-def pending_login(request, user, expires_at, *, visitor=False):
+def pending_login(request, user, expires_at, *, visitor=False, oauth_identity=None):
     raw = secrets.token_urlsafe(32)
     get_token(request)
     PendingLogin.objects.filter(expires_at__lte=timezone.now()).delete()
     PendingLogin.objects.create(
         digest=digest(raw), user=user, expires_at=expires_at, visitor=visitor,
+        oauth_identity=oauth_identity,
         password_digest=digest(user.password), csrf_digest=digest(request.META["CSRF_COOKIE"]),
     )
     return Response({"authenticated": False, "login_ticket": raw})
@@ -111,6 +112,20 @@ class LoginAccountRateThrottle(LoginFingerprintRateThrottle):
 
 class LoginConfirmRateThrottle(LoginFingerprintRateThrottle):
     scope = "login_confirm"
+
+
+class PasswordAttemptRateThrottle(LoginFingerprintRateThrottle):
+    """Limit password checks without throttling existing authenticated page access."""
+    scope = "login_account_fingerprint"
+
+    def get_cache_key(self, request, view):
+        from app.accounts.login_guard import fingerprint_key, request_fingerprint
+        try:
+            authenticated = ExpiringCookieTokenAuthentication().authenticate(request)
+        except APIException:
+            authenticated = None
+        ident = ("user:" + str(authenticated[0].pk)) if authenticated else fingerprint_key(request_fingerprint(request))
+        return self.cache_format % {"scope": self.scope, "ident": "password-attempt:" + ident} if ident else None
 
 
 def issue_user_token(user, *, rotate=False):
@@ -146,7 +161,7 @@ class AccountLogin(ObtainAuthToken):
     parser_classes = (AccessJSONParser, AccessFormParser, AccessMultiPartParser)
     authentication_classes = ()
     permission_classes = (LoginAdmissionPermission,)
-    throttle_classes = (LoginFingerprintRateThrottle, LoginAccountRateThrottle)
+    throttle_classes = (LoginFingerprintRateThrottle, LoginAccountRateThrottle, PasswordAttemptRateThrottle)
 
     def post(self, request, *args, **kwargs):
         ExpiringCookieTokenAuthentication._enforce_csrf(request)
@@ -328,9 +343,17 @@ class LoginStatusView(APIView):
     throttle_classes = ()
     def post(self, request):
         from app.accounts.login_guard import attach_fingerprint, request_fingerprint, fingerprint, remaining, valid_api_session, FingerprintRequired
-        # Existing sessions never depend on render collection or receipt renewal.
+        # Existing sessions never depend on render collection or its cooldown.
+        # Renew a supplied receipt opportunistically for a subsequent password login.
         if valid_api_session(request):
-            return Response({"remaining_seconds": 0})
+            fp = request_fingerprint(request)
+            if not fp:
+                try:
+                    data = request.data
+                    fp = fingerprint(data.get("fingerprint")) if isinstance(data, dict) else {}
+                except APIException:
+                    fp = {}
+            return attach_fingerprint(Response({"remaining_seconds": 0}), fp)
         fp = request_fingerprint(request)
         if not fp:
             data = request.data

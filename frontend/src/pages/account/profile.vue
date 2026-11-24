@@ -1,5 +1,6 @@
 <template>
   <div class="workspace-page profile-page profile-grid">
+    <LinuxDOConnection />
     <t-card :title="t('用量配额')" :subtitle="t('配额为 0 表示不限制')" :bordered="false">
       <t-loading :loading="loading">
         <div v-for="item in quotaItems" :key="item.label" class="quota-row">
@@ -47,6 +48,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
 import { useWorkspaceCopy } from '@/pages/account/workspace-copy'
+import LinuxDOConnection from '@/components/LinuxDOConnection.vue'
 
 const { t } = useWorkspaceCopy()
 
