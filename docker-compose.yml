@@ -109,7 +109,7 @@ services:
       CF_BYPASS_BROWSER_IDLE_SECONDS: "${CF_BYPASS_BROWSER_IDLE_SECONDS:-30}"
       CF_BYPASS_MAX_WAIT_SECONDS: "${CF_BYPASS_MAX_WAIT_SECONDS:-20}"
       CF_BYPASS_SECRET: "${GATEWAY_ADMIN_SECRET:?请设置 GATEWAY_ADMIN_SECRET}"
-      CF_BYPASS_ALLOWED_HOSTS: "${CF_BYPASS_ALLOWED_HOSTS:-chatgpt.com,.chatgpt.com}"
+      CF_BYPASS_ALLOWED_HOSTS: "${CF_BYPASS_ALLOWED_HOSTS:-chatgpt.com,.chatgpt.com,auth.openai.com,sentinel.openai.com,auth-cdn.oaistatic.com,cdn.auth0.com}"
     shm_size: "1gb"
     restart: unless-stopped
     networks:
