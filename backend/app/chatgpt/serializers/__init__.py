@@ -38,6 +38,24 @@ class ShowChatgptTokenSerializer(serializers.ModelSerializer):
     access_token_exp = serializers.SerializerMethodField()
     supported_login_modes = serializers.SerializerMethodField()
     has_refresh_token = serializers.SerializerMethodField()
+    credential_source = serializers.SerializerMethodField()
+    usage = serializers.SerializerMethodField()
+    automation = serializers.SerializerMethodField()
+    usage = serializers.SerializerMethodField()
+
+    def get_automation(self, obj):
+        return bool(obj.web_identity_id)
+
+    def get_usage(self, obj):
+        from app.chatgpt.usage_monitor import public_usage
+        return public_usage(obj, detailed=True)
+
+    def get_credential_source(self, obj):
+        return "automation" if obj.web_identity_id else "manual"
+
+    def get_usage(self, obj):
+        from app.chatgpt.usage_monitor import public_usage
+        return public_usage(obj, detailed=True)
 
     def get_access_token_exp(self, obj):
         if not obj.access_token_valid:
@@ -77,11 +95,13 @@ class ShowChatgptTokenSerializer(serializers.ModelSerializer):
             "access_token_exp",
             "login_count",
             "supported_login_modes",
-            "has_refresh_token",
+            "has_refresh_token", "credential_source", "usage",
+            "automation", "usage",
         )
 
 
 class AddChatgptTokenSerializer(serializers.Serializer):
+    account_id = serializers.IntegerField(required=False, min_value=1)
     auth_type = serializers.ChoiceField(choices=["cookie", "refresh_token"], default="cookie", required=False)
     chatgpt_token_list = serializers.ListField(child=serializers.CharField(allow_blank=True), required=False)
     client_id = serializers.CharField(required=False, allow_blank=True)
@@ -103,6 +123,7 @@ class CheckChatgptTokenExpirySerializer(serializers.Serializer):
 
 class RefreshChatgptTokenSerializer(serializers.Serializer):
     id = serializers.IntegerField()
+    force_web = serializers.BooleanField(default=False)
 
 
 class ResetChatgptLoginCountSerializer(serializers.Serializer):

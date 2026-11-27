@@ -5,10 +5,10 @@
         <t-form-item :label="t('HTTP 传输')">
           <template #help>
             <div class="transport-help">
-              <span><strong>reqwest：</strong>{{ t('稳定兼容，使用 Rust 原生 HTTP/TLS，连接复用成熟，不模拟浏览器网络指纹。') }}</span>
-              <span><strong>wreq：</strong>{{ t('性能与相似度平衡，使用 Chrome 146 风格的 TLS/HTTP2，保留持久连接池。') }}</span>
-              <span><strong>curl-impersonate：</strong>{{ t('实验模式，使用 Chrome 146 风格的 TLS/HTTP2 和 libcurl Multi，兼容性与资源占用需自行验证。') }}</span>
-              <span>{{ t('切换后会立即重建直连、节点及账号连接池；任何模式都不保证阻止上游模型回退。') }}</span>
+              <span><strong>reqwest：</strong>{{ t('已废弃，保留旧配置兼容；不模拟浏览器网络指纹。') }}</span>
+              <span><strong>wreq：</strong>{{ t('不稳定模式，使用 Chrome 146 风格的 TLS/HTTP2 和持久连接池。') }}</span>
+              <span><strong>curl-impersonate：</strong>{{ t('稳定模式，首次部署默认启用；使用 Chrome 146 风格的 TLS/HTTP2 和 libcurl Multi。') }}</span>
+              <span>{{ t('切换后会立即重建直连、节点及账号连接池。') }}</span>
             </div>
           </template>
           <div class="transport-control">
@@ -18,9 +18,9 @@
               :disabled="saving"
               @change="handleTransportChange"
             >
-              <t-radio-button value="reqwest">reqwest</t-radio-button>
-              <t-radio-button value="wreq">wreq</t-radio-button>
-              <t-radio-button value="curl-impersonate">curl-impersonate</t-radio-button>
+              <t-radio-button value="reqwest">{{ t('reqwest（已废弃）') }}</t-radio-button>
+              <t-radio-button value="wreq">{{ t('wreq（不稳定）') }}</t-radio-button>
+              <t-radio-button value="curl-impersonate">{{ t('curl-impersonate（稳定 · 默认）') }}</t-radio-button>
             </t-radio-group>
             <t-tag theme="primary" variant="light">{{ t('当前：') }}{{ formData.transport_mode }}</t-tag>
           </div>
@@ -84,18 +84,6 @@
         </t-form-item>
       </t-form>
     </t-card>
-    <t-dialog
-      :visible="experimentalDialogVisible"
-      :header="t('实验模式警告')"
-      :confirm-btn="t('仍然启用')"
-      :cancel-btn="t('取消')"
-      @confirm="confirmExperimentalTransport"
-      @close="cancelExperimentalTransport"
-    >
-      <p class="experimental-warning">
-        {{ t('curl-impersonate 仅用于实验性对照测试。切换后会重建全部上游连接池，可能出现代理兼容、流式响应或运行时依赖问题，也不能保证避免上游模型回退。') }}
-      </p>
-    </t-dialog>
   </div>
 </template>
 
@@ -110,8 +98,7 @@ const { t } = useWorkspaceCopy()
 const loading = ref(false)
 const saving = ref(false)
 const testingNodeId = ref<number | null>(null)
-const lastSavedTransportMode = ref<TransportMode>('reqwest')
-const experimentalDialogVisible = ref(false)
+const lastSavedTransportMode = ref<TransportMode>('curl-impersonate')
 
 type ProxyNodeForm = {
   localKey: number
@@ -128,14 +115,14 @@ let nextLocalKey = 1
 type TransportMode = 'reqwest' | 'wreq' | 'curl-impersonate'
 
 const normalizeTransportMode = (value: unknown): TransportMode => {
-  if (value === 'wreq' || value === 'curl-impersonate') {
+  if (value === 'reqwest' || value === 'wreq' || value === 'curl-impersonate') {
     return value
   }
-  return 'reqwest'
+  return 'curl-impersonate'
 }
 
 const formData = reactive<{ transport_mode: TransportMode; nodes: ProxyNodeForm[] }>({
-  transport_mode: 'reqwest',
+  transport_mode: 'curl-impersonate',
   nodes: []
 })
 
@@ -224,25 +211,8 @@ const handleSave = async (transportChanged = false) => {
 }
 
 const handleTransportChange = (value: TransportMode) => {
-  if (value === 'curl-impersonate' && lastSavedTransportMode.value !== value) {
-    formData.transport_mode = lastSavedTransportMode.value
-    experimentalDialogVisible.value = true
-    return
-  }
   formData.transport_mode = value
   handleSave(true)
-}
-
-const confirmExperimentalTransport = () => {
-  experimentalDialogVisible.value = false
-  formData.transport_mode = 'curl-impersonate'
-  handleSave(true)
-}
-
-const cancelExperimentalTransport = () => {
-  if (!experimentalDialogVisible.value) return
-  experimentalDialogVisible.value = false
-  formData.transport_mode = lastSavedTransportMode.value
 }
 
 const addNode = () => {
@@ -298,18 +268,19 @@ const handleTestNode = async (node: ProxyNodeForm) => {
   flex-wrap: wrap;
 }
 
+.transport-control :deep(.t-radio-group) {
+  max-width: 100%;
+  height: auto;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
 .transport-help {
   display: grid;
   gap: 4px;
   line-height: 1.6;
 }
 
-.experimental-warning {
-  margin: 0;
-  color: var(--app-text-secondary);
-  line-height: 1.7;
-  text-wrap: pretty;
-}
 
 .node-list {
   width: 100%;

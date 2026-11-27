@@ -5,8 +5,12 @@ from app.chatgpt.views.chatgpt import ChatGPTAccountView, ChatGPTLoginView, Chat
     ChatGPTRefreshTokenView, ChatGPTLoginCountResetView
 from app.chatgpt.views.gptcar import GptCarView, GptCarEnum, GptCarDetailView, GptCarUserAssignmentView
 from app.chatgpt.views.health import AccountHealthSettingsView
+from app.chatgpt.views.web_login import WebLoginView, WebLoginSyncView, WebLoginOwnersView
 
 urlpatterns = [
+    path("web-login", WebLoginView.as_view()),
+    path("web-login/sync", WebLoginSyncView.as_view()),
+    path("web-login/owners", WebLoginOwnersView.as_view()),
     path("health-settings", AccountHealthSettingsView.as_view()),
     path("enum", ChatGPTAccountEnum.as_view()),
     path("", ChatGPTAccountView.as_view()),

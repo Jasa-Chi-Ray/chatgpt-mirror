@@ -71,19 +71,23 @@ def attach_fingerprint(response, fp):
     return response
 
 
-def valid_api_session(request):
-    proof = hashlib.sha256(("login-cooldown-bypass:" + settings.GATEWAY_ADMIN_SECRET).encode()).hexdigest()
-    if constant_time_compare(request.headers.get("X-Mirror-Cooldown-Bypass", ""), proof):
-        return True
+def api_session_identity(request):
     from app.accounts.authentication import ExpiringCookieTokenAuthentication
     class ReadOnlyAuthentication(ExpiringCookieTokenAuthentication):
         @staticmethod
         def _enforce_csrf(_request):
             pass
     try:
-        return ReadOnlyAuthentication().authenticate(request) is not None
+        return ReadOnlyAuthentication().authenticate(request)
     except APIException:
-        return False
+        return None
+
+
+def valid_api_session(request):
+    proof = hashlib.sha256(("login-cooldown-bypass:" + settings.GATEWAY_ADMIN_SECRET).encode()).hexdigest()
+    if constant_time_compare(request.headers.get("X-Mirror-Cooldown-Bypass", ""), proof):
+        return True
+    return api_session_identity(request) is not None
 
 
 def remaining(fp):

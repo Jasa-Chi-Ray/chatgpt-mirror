@@ -2,7 +2,7 @@ import { createApp, defineComponent, h } from 'vue'
 import { createPinia } from 'pinia'
 import TDesign from 'tdesign-vue-next'
 import {
-  AddIcon, ChevronDownIcon, CodeIcon, DashboardIcon, FileIcon, InternetIcon, NotificationIcon,
+  AddIcon, ChevronDownIcon, CloseIcon, CodeIcon, DashboardIcon, FileIcon, InternetIcon, NotificationIcon,
   RootListIcon, SearchIcon, SecuredIcon, ServerIcon, UserAddIcon, UserCircleIcon, UserIcon,
 } from 'tdesign-icons-vue-next'
 import 'tdesign-vue-next/es/style/index.css'
@@ -13,6 +13,7 @@ import router from './router'
 const icons = {
   add: AddIcon,
   'chevron-down': ChevronDownIcon,
+  close: CloseIcon,
   code: CodeIcon,
   dashboard: DashboardIcon,
   file: FileIcon,

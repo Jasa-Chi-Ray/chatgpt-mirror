@@ -77,6 +77,9 @@ def policy_changing(sender, instance, update_fields=None, raw=False, **kwargs):
     if raw or not instance.pk:
         return
     old = User.objects.select_for_update().filter(pk=instance.pk).first()
+    if old and old.username != instance.username:
+        from app.accounts.models import RetiredUsername
+        RetiredUsername.objects.get_or_create(name=old.username.strip().casefold())
     if old:
         instance.authorization_version = old.authorization_version
     if old and any(getattr(old, field) != getattr(instance, field)
@@ -89,3 +92,9 @@ def policy_changing(sender, instance, update_fields=None, raw=False, **kwargs):
         # update_fields may exclude this internal field: update it inside the same transaction.
         instance.authorization_version = uuid.uuid4()
         User.objects.filter(pk=old.pk).update(authorization_version=instance.authorization_version)
+
+
+@receiver(pre_delete,sender=User)
+def retire_deleted_username(sender,instance,**kwargs):
+    from app.accounts.models import RetiredUsername
+    RetiredUsername.objects.get_or_create(name=instance.username.strip().casefold())

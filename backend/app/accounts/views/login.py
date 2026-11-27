@@ -314,6 +314,8 @@ class AccountRegister(APIView):
         if User.objects.filter(username=data["username"]).exists():
             raise ValidationError({"message": "账号已存在"})
 
+        from app.accounts.names import ensure_username_available
+        ensure_username_available(data['username'])
         res_json = req_gateway("post", "/api/get-user-info", json={"chatgpt_token": data["chatgpt_token"]})
 
         from app.chatgpt.models import ChatgptCar
@@ -369,14 +371,15 @@ class LoginGuardView(APIView):
     permission_classes = ()
     throttle_classes = ()
     def post(self, request):
-        from app.accounts.login_guard import remaining, valid_api_session, COOKIE
+        from app.accounts.login_guard import remaining, api_session_identity, COOKIE
         from types import SimpleNamespace
         if not constant_time_compare(request.headers.get("X-Gateway-Secret", ""), settings.GATEWAY_ADMIN_SECRET):
             return Response({}, status=401)
         cookies = {AUTH_COOKIE_NAME: str(request.data.get("api_token", "")),
                    "free_session": str(request.data.get("free_session", "")), COOKIE: str(request.data.get("fingerprint_cookie", ""))}
         proxy = SimpleNamespace(COOKIES=cookies, headers={}, META={}, data={})
-        authenticated = valid_api_session(proxy)
+        identity = api_session_identity(proxy)
+        authenticated = identity is not None
         from app.accounts.login_guard import request_fingerprint
         seconds = 0 if authenticated else remaining(request_fingerprint(proxy))
-        return Response({"authenticated": authenticated, "remaining_seconds": seconds})
+        return Response({"authenticated": authenticated, "remaining_seconds": seconds, "is_superuser": bool(identity and identity[0].is_superuser)})

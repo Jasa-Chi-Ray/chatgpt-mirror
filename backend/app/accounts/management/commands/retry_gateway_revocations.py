@@ -19,6 +19,10 @@ class Command(BaseCommand):
                        .order_by("next_attempt_at").values_list("pk", flat=True)[:100])
             for event_id in ids:
                 deliver(event_id)
+            from app.accounts.models import UserWorkModeSync
+            from app.accounts.work_mode_sync import deliver as deliver_mode
+            for event_id in UserWorkModeSync.objects.filter(next_attempt_at__lte=timezone.now()).order_by('next_attempt_at').values_list('pk',flat=True)[:100]:
+                deliver_mode(event_id)
             if options["once"]:
                 return
             time.sleep(2)

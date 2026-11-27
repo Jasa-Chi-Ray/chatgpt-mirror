@@ -14,10 +14,12 @@ import { useRoute } from 'vue-router'
 import english from 'tdesign-vue-next/es/locale/en_US'
 import chinese from 'tdesign-vue-next/es/locale/zh_CN'
 import { useAppearanceStore } from '@/store/appearance'
+import { useUserStore } from '@/store/user'
 import { leaveOpeningSource } from '@/layouts/window-opening'
 import { replayPressFeedback } from '@/layouts/press-feedback'
 
 const appearance = useAppearanceStore()
+const userStore = useUserStore()
 const route = useRoute()
 const config = computed(() => ({
   ...(appearance.language === 'en' ? english : chinese),
@@ -30,8 +32,9 @@ onBeforeUnmount(() => document.removeEventListener('click', replayPressFeedback,
 watchEffect(() => {
   document.documentElement.setAttribute('theme-mode', appearance.theme)
   document.documentElement.lang = appearance.language
-  document.documentElement.toggleAttribute('data-admin-workspace', Boolean(route.meta.requiresAdmin))
-  document.documentElement.toggleAttribute('data-profile-workspace', route.name === 'Profile')
+  const connectionPage = route.name === 'Connections'
+  document.documentElement.toggleAttribute('data-admin-workspace', Boolean(route.meta.requiresAdmin) || (connectionPage && userStore.isAdmin))
+  document.documentElement.toggleAttribute('data-profile-workspace', route.name === 'Profile' || (connectionPage && !userStore.isAdmin))
 })
 </script>
 

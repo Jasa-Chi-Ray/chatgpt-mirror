@@ -27,6 +27,7 @@ BASE = '/0x/user/oauth/linuxdo/'
 class LinuxDOTests(TestCase):
     def setUp(self):
         cache.clear()
+        patch('app.accounts.names.req_gateway', return_value={'available': True}).start()
         self.gateway=patch('app.accounts.revocations.req_gateway', return_value={}).start()
         self.addCleanup(patch.stopall)
         self.user=User.objects.create_user('member', password='test-password')

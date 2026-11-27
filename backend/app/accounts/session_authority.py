@@ -133,7 +133,8 @@ def authorization_details(value, subject):
             expiry = min(expiry, visitor.expires_at)
         elif subject != user.username:
             return None
-        return {"active": True, "version": payload["version"], "expires_at": int(expiry.timestamp()),
+        return {"active": True, "version": payload["version"], "expires_at": int(expiry.timestamp()), "user_id": user.pk,
+                "is_staff": user.is_staff,
                 "login_session_id": digest(token.key) if user.can_use_multiple_sessions else ""}
     except (signing.BadSignature, Token.DoesNotExist, LoginSession.DoesNotExist, KeyError, TypeError, ValueError):
         return None

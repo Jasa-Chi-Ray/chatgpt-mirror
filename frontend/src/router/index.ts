@@ -102,6 +102,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '政治敏感内容屏蔽', requiresAdmin: true }
       },
       {
+        path: 'connections',
+        name: 'Connections',
+        component: () => import('@/pages/account/connections.vue'),
+        meta: { title: '自动化链接' }
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/pages/account/profile.vue'),

@@ -39,6 +39,7 @@ def due_checks(limit=4):
 def probe(account):
     try:
         result = req_gateway("post", "/api/diagnose-chatgpt-auth", timeout=(5, 75), json={
+            "web_identity_id": account.web_identity_id,
             "access_token": account.access_token,
             "session_token": account.session_token,
             "proxy_node_id": account.proxy_node_id,
@@ -47,6 +48,15 @@ def probe(account):
             return False, "账号诊断返回格式异常"
         healthy = result["access_token_valid"] or result["session_token_valid"]
         detail = "至少一种登录凭据可用" if healthy else "AccessToken 与 SessionToken 均不可用"
+        credentials = result.get("resolved_credentials") or {}
+        if account.web_identity_id and credentials.get("web_identity_id") == account.web_identity_id:
+            from app.chatgpt.views.web_login import apply_web_credentials
+            apply_web_credentials(account, {**credentials, **{
+                "user_info": result.get("user_info") or {},
+                "access_token_valid": result["access_token_valid"], "session_token_valid": result["session_token_valid"],
+                "last_error": "" if healthy else detail,
+            }})
+            return healthy, detail
         # Do not overwrite credentials, plan, auth_status, or a concurrent edit.
         ChatgptAccount.objects.filter(pk=account.pk, updated_time=account.updated_time).update(
             access_token_valid=result["access_token_valid"], session_token_valid=result["session_token_valid"],

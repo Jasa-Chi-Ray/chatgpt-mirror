@@ -3,12 +3,12 @@
     <t-card :title="t('上游访问控制')" bordered>
       <div class="security-status">
         <div>
-          <div class="status-title">{{ t('禁止读取和修改上游设置') }}</div>
+          <div class="status-title">{{ t('保护上游账号设置') }}</div>
           <div class="status-description">
-            {{ t('统一控制通知、个性化、记忆、安全、账户、订阅和 Codex 设置。网关直接拦截相关接口请求。') }}
+            {{ t('禁止修改共享账号设置。读取返回镜像站预设数据；弹窗与引导状态按用户独立保存，文件与回答所需状态保留真实结果。') }}
           </div>
         </div>
-        <t-switch v-model="settingsLocked" :disabled="!loaded || saving" :aria-label="t('禁止读取和修改上游设置')" @change="saved = false" />
+        <t-switch v-model="settingsLocked" :disabled="!loaded || saving" :aria-label="t('保护上游账号设置')" @change="saved = false" />
       </div>
       <div class="security-status dot-control">
         <div>

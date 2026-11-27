@@ -213,3 +213,15 @@ class VisitLog(models.Model):
     def save_data(cls, data):
         obj = cls.objects.create(**data)
         return obj
+
+
+class RetiredUsername(models.Model):
+    name = models.CharField(max_length=200, primary_key=True)
+    retired_at = models.DateTimeField(default=timezone.now)
+
+
+class UserWorkModeSync(models.Model):
+    user = models.OneToOneField(User,on_delete=models.CASCADE)
+    revision = models.UUIDField(default=uuid.uuid4)
+    next_attempt_at = models.DateTimeField(default=timezone.now,db_index=True)
+    attempts = models.PositiveIntegerField(default=0)

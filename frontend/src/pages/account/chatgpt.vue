@@ -80,6 +80,7 @@
             {{ formatTokenRemaining(row) }}
           </t-tag>
         </template>
+        <template #usage="{ row }"><UsageMeter :usage="row.usage" detailed /></template>
         <template #last_error="{ row }">
           <span>{{ row.last_error || '-' }}</span>
         </template>
@@ -89,29 +90,29 @@
               {{ t('检测') }}
             </t-link>
             <t-link
-              v-if="row.has_refresh_token"
               theme="primary"
               :loading="refreshingId === row.id"
               @click="handleRefreshToken(row)"
             >
-              {{ t('刷新Token') }}
+              {{ t('更新 Token') }}
             </t-link>
             <t-link theme="primary" @click="showEditDialog(row)">{{ t('编辑') }}</t-link>
             <t-popconfirm :content="t('确定重置该账号的被登录次数吗？')" @confirm="handleResetLoginCount(row)">
               <t-link theme="warning">{{ t('重置次数') }}</t-link>
             </t-popconfirm>
-            <t-popconfirm :content="t('确定删除该账号吗？')" @confirm="handleDelete(row)">
+            <t-popconfirm :content="t('删除上游账号将同时解除自动化链接并删除 Token，是否继续？')" @confirm="handleDelete(row)">
               <t-link theme="danger">{{ t('删除') }}</t-link>
             </t-popconfirm>
           </t-space>
         </template>
       </t-table>
     </t-card>
+    <Connections ref="connectionsRef" :admin="true" dialog-only @changed="fetchData" />
 
     <!-- 添加对话框 -->
     <t-dialog
       :visible="addDialogVisible"
-      :header="t('添加上游账号')"
+      :header="manualTargetId ? t('更新 Token') : t('添加上游账号')"
       :confirm-btn="{ loading: submitLoading }"
       @confirm="handleAdd"
       @close="addDialogVisible = false"
@@ -162,7 +163,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import Connections from './connections.vue'
+import UsageMeter from './components/UsageMeter.vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import request from '@/api/request'
 import AccountHealthSettings from './components/AccountHealthSettings.vue'
@@ -178,10 +181,12 @@ const addFormRef = ref()
 const editFormRef = ref()
 const tableData = ref<any[]>([])
 const tokenInput = ref('')
+const manualTargetId = ref<number | null>(null)
 const proxyNodeOptions = ref<Array<{ id: number }>>([])
 const checkingAll = ref(false)
 const checkingId = ref<number | null>(null)
 const refreshingId = ref<number | null>(null)
+const connectionsRef = ref<InstanceType<typeof Connections> | null>(null)
 const nowSeconds = ref(Math.floor(Date.now() / 1000))
 const query = ref('')
 const statusFilter = ref('')
@@ -200,6 +205,7 @@ const columns = [
   { colKey: 'access_token_valid', title: 'AccessToken', cell: 'access_token_valid', width: 110 },
   { colKey: 'session_token_valid', title: 'SessionToken', cell: 'session_token_valid', width: 120 },
   { colKey: 'supported_login_modes', title: '支持模式', cell: 'supported_login_modes', width: 160 },
+  { colKey: 'usage', title: '额度与繁忙程度', cell: 'usage', width: 240 },
   { colKey: 'login_count', title: '被登录次数', cell: 'login_count', width: 120 },
   { colKey: 'proxy_node_id', title: '代理节点', cell: 'proxy_node_id', width: 110 },
   { colKey: 'token_remaining', title: 'AccessToken剩余', cell: 'token_remaining', width: 150 },
@@ -219,7 +225,10 @@ const editFormData = reactive({
   proxy_node_id: null as number | null
 })
 
+let usagePoll: ReturnType<typeof setInterval> | undefined
+onBeforeUnmount(() => { if (usagePoll) clearInterval(usagePoll) })
 onMounted(() => {
+  usagePoll = setInterval(() => { if (!document.hidden && !loading.value) void fetchData() }, 60000)
   fetchData()
   fetchProxyNodes()
 })
@@ -322,6 +331,7 @@ const onPageChange = (pageInfo: any) => {
 }
 
 const showAddDialog = () => {
+  manualTargetId.value = null
   tokenInput.value = ''
   addDialogVisible.value = true
 }
@@ -367,7 +377,8 @@ const handleAdd = async () => {
 
   submitLoading.value = true
   const data = await request('/0x/chatgpt', 'POST', {
-    chatgpt_token_list: tokens
+    chatgpt_token_list: tokens,
+    ...(manualTargetId.value ? { account_id: manualTargetId.value } : {})
   })
   submitLoading.value = false
 
@@ -444,16 +455,25 @@ const handleCheckTokenExpiry = async (row?: any) => {
 }
 
 const handleRefreshToken = async (row: any) => {
+  if (refreshingId.value !== null) return
   refreshingId.value = row.id
-  const data = await request('/0x/chatgpt/refresh-token', 'POST', {
-    id: row.id
-  })
-  refreshingId.value = null
-
-  if (data?.result) {
-    mergeTokenCheckResults([data.result])
-    MessagePlugin.success(t('刷新成功，Token剩余：{0}', [formatSeconds(data.result.remaining_seconds)]))
-  }
+  try {
+    const data = await request('/0x/chatgpt/refresh-token', 'POST', { id: row.id, force_web: true })
+    if (data?.status === 'manual_required') {
+      tokenInput.value = ''
+      manualTargetId.value = row.id
+      addDialogVisible.value = true
+      return
+    }
+    if (data?.status === 'reauth_required') {
+      MessagePlugin.info(data.message || t('请完成官网登录以更新凭据'))
+      await connectionsRef.value?.startConnection(data.connection_id || undefined, row.id)
+    } else if (data?.result) {
+      mergeTokenCheckResults([data.result])
+      MessagePlugin.success(t('Session 和 AccessToken 已更新，Token剩余：{0}', [formatSeconds(data.result.remaining_seconds)]))
+      await fetchData()
+    }
+  } finally { refreshingId.value = null }
 }
 
 const handleDelete = async (row: any) => {

@@ -137,6 +137,7 @@ const adminNavigation = [
   { to: '/account/overview', icon: 'dashboard', label: '运维概览' },
   { to: '/account/user', icon: 'user', label: '用户' },
   { to: '/account/chatgpt', icon: 'root-list', label: '上游账号' },
+  { to: '/account/connections', icon: 'control-platform', label: '自动化链接' },
   { to: '/account/gptcar', icon: 'server', label: '账号池' },
   { to: '/account/logs', icon: 'file', label: '日志' },
   { to: '/account/announcements', icon: 'notification', label: '公告' },
@@ -147,7 +148,7 @@ const adminNavigation = [
 ]
 const navigation = computed(() => workspaceAdmin.value
   ? adminNavigation
-  : [{ to: '/account/profile', icon: 'user-circle', label: '账户中心' }])
+  : [{ to: '/account/profile', icon: 'user-circle', label: '账户中心' }, { to: '/account/connections', icon: 'control-platform', label: '自动化链接' }])
 
 const username = computed(() => (logoutIdentity.value?.username ?? userStore.username) || t('管理员'))
 const pageTitle = computed(() => t(String(route.meta.title || '管理')))

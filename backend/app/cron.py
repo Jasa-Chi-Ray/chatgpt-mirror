@@ -35,7 +35,7 @@ def _update_token(chatgpt_username, chatgpt_token, client_id=None):
             "client_id": client_id,
             "refresh_token": chatgpt_token,
         }
-    res = requests.post(url, headers=headers, json=payload)
+    res = requests.post(url, headers=headers, json=payload, timeout=(5, 75))
     res_json = res.json()
 
     if res.status_code != 200:
@@ -43,7 +43,7 @@ def _update_token(chatgpt_username, chatgpt_token, client_id=None):
         if (
             "token 失效" in message
             or "authentication token" in message
-            or "refresh_token" in message
+            or any(code in message for code in ("invalid_grant", "refresh_token_reused", "refresh_token_expired", "refresh_token_invalid"))
         ):
             logger.warning("token 失效: status=%s", res.status_code)
             return False
@@ -56,7 +56,7 @@ def _update_token(chatgpt_username, chatgpt_token, client_id=None):
 
 
 def update_access_token():
-    for line in ChatgptAccount.objects.all():
+    for line in ChatgptAccount.objects.filter(web_identity_id__isnull=True):
         if _access_token_is_fresh(line.access_token) and line.auth_status:
             continue
 
@@ -84,7 +84,7 @@ def update_access_token():
 def check_access_token():
 
     need_to_update = int(time.time() - 3600)
-    for line in ChatgptAccount.objects.filter(updated_time__lte=need_to_update, auth_status=True).all():
+    for line in ChatgptAccount.objects.filter(updated_time__lte=need_to_update, auth_status=True, web_identity_id__isnull=True).all():
         if line.access_token:
             if _update_token(line.chatgpt_username, line.access_token) is False:
                 line.auth_status = False

@@ -40,7 +40,7 @@ class ShowUserAccountModelSerializer(serializers.ModelSerializer):
         self.conversation_stats_dict = conversation_stats_dict or {}
 
     def get_chatgpt_count(self, obj):
-        return ChatgptAccount.get_by_gptcar_list(obj.gptcar_list).count()
+        return ChatgptAccount.get_for_user(obj).count()
 
     def get_use_count(self, obj):
         return self.use_count_dict.get(obj.username, 0)

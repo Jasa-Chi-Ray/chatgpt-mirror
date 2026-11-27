@@ -42,6 +42,12 @@ class ChatgptAccount(models.Model):
     extra_cookies = EncryptedJSONField(default=list, blank=True, verbose_name="额外 Cookie")
     refresh_token = EncryptedTextField(null=True, blank=True)
     refresh_client_id = EncryptedTextField(null=True, blank=True)
+    web_identity_id = models.CharField(max_length=64, null=True, blank=True, db_index=True)
+    web_identity_version = models.PositiveBigIntegerField(default=0)
+    automation_owner = models.ForeignKey("accounts.User", null=True, blank=True, on_delete=models.CASCADE, related_name="automated_accounts")
+    usage_snapshot = models.JSONField(default=dict, blank=True)
+    usage_checked_at = models.BigIntegerField(null=True, blank=True)
+    usage_next_check_at = models.BigIntegerField(default=0, db_index=True)
     access_token_valid = models.BooleanField(default=False, verbose_name="AccessToken 可用")
     session_token_valid = models.BooleanField(default=False, verbose_name="SessionToken 可用")
     proxy_node_id = models.IntegerField(null=True, blank=True, verbose_name="代理节点")
@@ -65,6 +71,12 @@ class ChatgptAccount(models.Model):
 
 
     @classmethod
+    def get_for_user(cls, user):
+        from django.db.models import Q
+        assigned = cls.get_by_gptcar_list(user.gptcar_list).values("id")
+        return cls.objects.filter(Q(id__in=assigned, automation_owner__isnull=True) | Q(automation_owner=user)).order_by("-plan_type", "-id")
+
+    @classmethod
     def get_by_id(cls, chatgpt_id):
         return cls.objects.filter(id=chatgpt_id).first()
 
@@ -76,6 +88,7 @@ class ChatgptAccount(models.Model):
         from app.utils import req_gateway
 
         result = req_gateway("post", "/api/diagnose-chatgpt-auth", json={
+            "web_identity_id": self.web_identity_id,
             "access_token": self.access_token,
             "session_token": self.session_token,
             "proxy_node_id": self.proxy_node_id,
@@ -84,6 +97,18 @@ class ChatgptAccount(models.Model):
         self.session_token_valid = bool(result.get("session_token_valid"))
         self.last_check_at = result.get("last_check_at") or now
         self.last_error = result.get("last_error") or ""
+        credentials = result.get("resolved_credentials") or {}
+        if self.web_identity_id and credentials.get("web_identity_id") == self.web_identity_id:
+            from app.chatgpt.views.web_login import apply_web_credentials
+            apply_web_credentials(self, {
+                **credentials,
+                "user_info": result.get("user_info") or {},
+                "access_token_valid": self.access_token_valid,
+                "session_token_valid": self.session_token_valid,
+                "last_error": self.last_error,
+                "last_check_at": self.last_check_at,
+            }, touch_modified=True)
+            return
 
         user_info = result.get("user_info") or {}
         if user_info.get("email"):
@@ -100,6 +125,7 @@ class ChatgptAccount(models.Model):
             "last_check_at",
             "last_error",
             "updated_time",
+            "access_token", "session_token", "extra_cookies",
         ])
 
     @classmethod
@@ -148,4 +174,11 @@ class AccountHealthState(models.Model):
     notified = models.BooleanField(default=False)
     detail = models.CharField(max_length=200, blank=True)
     lease_until = models.DateTimeField(null=True, blank=True)
+    lease_token = models.CharField(max_length=32, blank=True)
+
+
+class AccountUsageSchedule(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    next_dispatch_at = models.BigIntegerField(default=0)
+    lease_until = models.BigIntegerField(default=0)
     lease_token = models.CharField(max_length=32, blank=True)

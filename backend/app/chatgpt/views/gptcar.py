@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from app.accounts.models import User
+from app.accounts.target_security import require_manage_user, managed_write
 from app.chatgpt.models import ChatgptCar
 from app.chatgpt.serializers import ShowGptCarSerializer, AddChatgptCarModelSerializer, DeleteChatgptCarSerializer
 from app.page import DefaultPageNumberPagination
@@ -77,7 +78,7 @@ class GptCarUserAssignmentView(APIView):
     permission_classes = (IsAuthenticated, IsAdminUser)
 
     @staticmethod
-    def _get_car_and_users(car_id, request):
+    def _get_car_and_users(car_id, request, actor):
         car = ChatgptCar.objects.filter(id=car_id).first()
         if not car:
             raise ValidationError({"message": "号池不存在"})
@@ -94,31 +95,35 @@ class GptCarUserAssignmentView(APIView):
         users = list(User.objects.filter(id__in=user_ids, is_superuser=False))
         if len(users) != len(user_ids):
             raise ValidationError({"user_ids": "部分用户不存在或不可操作"})
+        for user in users:require_manage_user(actor,user)
         return car, users
 
     def post(self, request, car_id):
-        car, users = self._get_car_and_users(car_id, request)
-        changed_users = []
-        for user in users:
-            car_ids = clean_int_list(user.gptcar_list or [])
-            if car.id not in car_ids:
-                user.gptcar_list = [*car_ids, car.id]
-                changed_users.append(user)
-        if changed_users:
-            for user in changed_users:
-                user.save(update_fields=["gptcar_list"])
-        return Response({"message": "用户已加入号池"})
+        with managed_write(request.user) as actor:
+            car, users = self._get_car_and_users(car_id, request, actor)
+            changed_users = []
+            for user in users:
+                car_ids = clean_int_list(user.gptcar_list or [])
+                if car.id not in car_ids:
+                    user.gptcar_list = [*car_ids, car.id]
+                    changed_users.append(user)
+            if changed_users:
+                for user in changed_users:
+                    user.save(update_fields=["gptcar_list"])
+            return Response({"message": "用户已加入号池"})
+
 
     def delete(self, request, car_id):
-        car, users = self._get_car_and_users(car_id, request)
-        changed_users = []
-        for user in users:
-            car_ids = clean_int_list(user.gptcar_list or [])
-            new_car_ids = [item for item in car_ids if item != car.id]
-            if new_car_ids != car_ids:
-                user.gptcar_list = new_car_ids
-                changed_users.append(user)
-        if changed_users:
-            for user in changed_users:
-                user.save(update_fields=["gptcar_list"])
-        return Response({"message": "用户已移出号池"})
+        with managed_write(request.user) as actor:
+            car, users = self._get_car_and_users(car_id, request, actor)
+            changed_users = []
+            for user in users:
+                car_ids = clean_int_list(user.gptcar_list or [])
+                new_car_ids = [item for item in car_ids if item != car.id]
+                if new_car_ids != car_ids:
+                    user.gptcar_list = new_car_ids
+                    changed_users.append(user)
+            if changed_users:
+                for user in changed_users:
+                    user.save(update_fields=["gptcar_list"])
+            return Response({"message": "用户已移出号池"})

@@ -4,7 +4,7 @@ from unittest.mock import Mock, call, patch
 
 from django.core import signing
 from django.db import connection
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.test.utils import override_settings
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -231,7 +231,7 @@ class SecurityRegressionTests(TestCase):
             self.assertFalse(user.hide_chat_work_toggle)
             self.assertTrue(user.hide_library)
 
-    @patch("app.accounts.views.req_gateway", side_effect=ValidationError("网关不可用"))
+    @patch("app.accounts.work_mode_sync.req_gateway", side_effect=ValidationError("网关不可用"))
     def test_work_mode_sync_failure_is_not_reported_as_success(self, gateway):
         admin = User.objects.create_superuser(
             username="work-mode-admin",
@@ -256,15 +256,20 @@ class SecurityRegressionTests(TestCase):
             format="json",
         )
         force_authenticate(request, user=admin)
-        response = UserAccountView.as_view()(request)
-        self.assertEqual(response.status_code, 400)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = UserAccountView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
         user.refresh_from_db()
         self.assertTrue(user.force_chat_mode)
         gateway.assert_called_once_with(
             "post",
             "/api/user-work-mode",
+            timeout=(1, 2),
             json={"user_name": user.username, "force_chat_mode": True},
         )
+
+        from app.accounts.models import UserWorkModeSync
+        self.assertTrue(UserWorkModeSync.objects.filter(user=user, attempts=1).exists())
 
     @patch("app.accounts.views.backup.req_gateway")
     @patch("app.accounts.views.req_gateway")
@@ -536,7 +541,8 @@ class SecurityRegressionTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             response = UserSessionRevokeView.as_view()(request)
         # TestCase's outer transaction defers delivery until the captured commit.
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["gateway_cleanup_pending"])
         self.assertFalse(Token.objects.filter(key=token.key).exists())
         req_gateway.assert_called_once()
         self.assertEqual(req_gateway.call_args.args, ("post", "/api/revoke-authorization"))
@@ -559,7 +565,8 @@ class SecurityRegressionTests(TestCase):
 
         response = UserSessionRevokeView.as_view()(request)
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["gateway_cleanup_pending"])
         self.assertFalse(Token.objects.filter(key=token.key).exists())
 
     @patch("app.accounts.views.req_gateway")
@@ -1267,3 +1274,25 @@ class AnnouncementTests(TestCase):
         force_authenticate(request, user=self.admin)
         response = AnnouncementAdminView.as_view()(request)
         self.assertEqual(response.status_code, 400)
+
+
+class ProxyTransportUpgradeCompatibilityTests(SimpleTestCase):
+    @patch("app.accounts.views.req_gateway", return_value={"transport_mode": "curl-impersonate"})
+    def test_legacy_proxy_requests_leave_transport_selection_to_the_gateway(self, gateway):
+        from app.accounts.views import MirrorProxyConfigView, MirrorProxyTestView
+        factory = APIRequestFactory()
+        admin = SimpleNamespace(pk=900001, is_authenticated=True, is_superuser=True)
+        for view, endpoint in ((MirrorProxyConfigView, "/api/mirror-proxy-config"),
+                               (MirrorProxyTestView, "/api/test-mirror-proxy-config")):
+            for mode in (None, "", "reqwest", "wreq", "curl-impersonate"):
+                with self.subTest(view=view.__name__, mode=mode):
+                    gateway.reset_mock()
+                    payload = {"nodes": []}
+                    if mode is not None:
+                        payload["transport_mode"] = mode
+                    request = factory.post("/0x/user/proxy-config", payload, format="json")
+                    force_authenticate(request, user=admin)
+                    response = view.as_view()(request)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(gateway.call_args.args, ("post", endpoint))
+                    self.assertEqual(gateway.call_args.kwargs["json"]["transport_mode"], mode or None)

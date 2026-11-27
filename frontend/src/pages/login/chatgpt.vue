@@ -101,10 +101,7 @@
             >
               <span class="account-card__title">{{ item.chatgpt_flag }}</span>
               <span class="account-card__plan" :class="{ 'account-card__plan--paid': item.plan_type !== 'free' }">{{ item.plan_type }}</span>
-              <span class="account-card__footer">
-                <span>{{ copy.loginCount }}</span>
-                <span class="account-card__count">{{ item.login_count || 0 }}<span v-if="copy.times">{{ copy.times }}</span></span>
-              </span>
+              <UsageMeter :usage="item.usage" />
             </button>
           </div>
         </div>
@@ -122,6 +119,7 @@
 </template>
 
 <script setup lang="ts">
+import UsageMeter from '@/pages/account/components/UsageMeter.vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -198,6 +196,7 @@ const clearEntrance = () => {
 }
 
 onBeforeUnmount(() => {
+  if (usagePoll) clearInterval(usagePoll)
   pageLifetime.abort()
   observer?.disconnect()
   clearEntrance()
@@ -252,7 +251,7 @@ interface TableData {
   chatgpt_flag: string
   plan_type: string
   auth_status: boolean
-  login_count: number
+  usage: any
   access_token_valid: boolean
   session_token_valid: boolean
   supported_login_modes: string[]
@@ -260,7 +259,9 @@ interface TableData {
 }
 const tableData = ref<TableData[]>([])
 
+let usagePoll: ReturnType<typeof setInterval> | undefined
 onMounted(async () => {
+  usagePoll = setInterval(() => { if (!document.hidden) void getUserChatGPTAccountList(true) }, 60000)
   const panel = frame.value
   const content = frameContent.value
   if (panel && content) {
@@ -345,10 +346,12 @@ const formatAnnouncementSchedule = (item: Announcement) => {
   return `${start} ${copy.value.through} ${end} · ${timeZone}`
 }
 
-const getUserChatGPTAccountList = async () => {
-  preparing.value = true
-  tableLoading.value = true
-  statusText.value = '正在加载可用账号...'
+const getUserChatGPTAccountList = async (background = false) => {
+  if (!background) {
+    preparing.value = true
+    tableLoading.value = true
+    statusText.value = '正在加载可用账号...'
+  }
   const data = await request('/0x/user/chatgpt-list')
   tableLoading.value = false
   preparing.value = false
@@ -771,8 +774,10 @@ const onSelect = async (chatgptId: number | null) => {
 }
 
 .account-card:hover:not(:disabled) { border-color: var(--accent); background: var(--field); }
+.account-card :deep(.usage-meter) { grid-column: 1 / -1; }
 .account-card:active:not(:disabled) { transform: translateY(1px); }
 .account-card:disabled:not([aria-busy="true"]) { opacity: .54; cursor: not-allowed; }
+.account-card :deep(.usage-meter) { grid-column: 1 / -1; }
 .account-card__title { align-self: center; font-size: 16px; font-weight: 640; overflow-wrap: anywhere; }
 .account-card__plan { border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; max-width: 85px; }
 .account-card__plan--paid {

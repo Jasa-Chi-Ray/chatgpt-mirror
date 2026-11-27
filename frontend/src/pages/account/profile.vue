@@ -1,6 +1,9 @@
 <template>
   <div class="workspace-page profile-page profile-grid">
     <LinuxDOConnection />
+    <t-card :title="t('自动化链接')" :subtitle="t('连接个人账号，查看连接状态与最近更新时间')" :bordered="false">
+      <t-button theme="primary" @click="$router.push('/account/connections')">{{ t('管理自动化链接') }}</t-button>
+    </t-card>
     <t-card :title="t('用量配额')" :subtitle="t('配额为 0 表示不限制')" :bordered="false">
       <t-loading :loading="loading">
         <div v-for="item in quotaItems" :key="item.label" class="quota-row">

@@ -231,6 +231,8 @@ class LinuxDOCompleteView(APIView):
                     while (username in (settings.ADMIN_USERNAME, settings.FREE_ACCOUNT_USERNAME)
                             or User.objects.filter(username=username).exists()):
                         username = base + '_' + secrets.token_hex(4)
+                    from app.accounts.names import ensure_username_available
+                    ensure_username_available(username)
                     user = User(username=username)
                     user.set_unusable_password()
                     user.save()

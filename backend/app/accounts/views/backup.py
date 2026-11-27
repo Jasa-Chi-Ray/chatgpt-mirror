@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 
 from app.permissions import IsSuperUser
 
-from app.accounts.models import Announcement, User, VisitLog, LoginSession, OAuthIdentity, OAuthFlow
+from app.accounts.models import Announcement, User, VisitLog, LoginSession, OAuthIdentity, OAuthFlow, RetiredUsername
 from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.fields import decrypt_value, encrypt_value
 from app.utils import req_gateway
@@ -60,6 +60,7 @@ def _export_django_data():
     groups = Group.objects.prefetch_related("permissions__content_type").order_by("id")
     users = User.objects.prefetch_related("groups", "user_permissions__content_type").order_by("id")
     return {
+        "retired_usernames": [{"name": item.name, "retired_at": _iso(item.retired_at)} for item in RetiredUsername.objects.order_by("name")],
         "groups": [
             {
                 "id": group.id,
@@ -141,6 +142,8 @@ def _export_django_data():
                         "extra_cookies",
                         "refresh_token",
                         "refresh_client_id",
+                        "web_identity_id",
+                        "web_identity_version", "automation_owner_id", "usage_snapshot", "usage_checked_at", "usage_next_check_at",
                         "access_token_valid",
                         "session_token_valid",
                         "proxy_node_id",
@@ -296,6 +299,16 @@ def _restore_complete_django(payload):
         ChatgptCar.objects.all().delete()
         ChatgptAccount.objects.all().delete()
 
+        retired = payload.get("retired_usernames", [])
+        if not isinstance(retired, list):
+            raise ValidationError({"archive": "历史用户名数据无效"})
+        # Union with local tombstones, including names retired by this restore.
+        for raw in retired:
+            name = raw.get("name") if isinstance(raw, dict) else None
+            if not isinstance(name, str) or not name or len(name) > 200:
+                raise ValidationError({"archive": "历史用户名数据无效"})
+            RetiredUsername.objects.get_or_create(name=name.strip().casefold(), defaults={
+                "retired_at": _parse_datetime(raw.get("retired_at"), fallback=timezone.now())})
         groups = {}
         for raw in payload["groups"]:
             data = dict(raw)
