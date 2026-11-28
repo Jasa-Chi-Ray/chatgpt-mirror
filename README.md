@@ -1,6 +1,6 @@
 # ChatGPT Mirror
 
-### 适合个人学习和研究使用。
+## 适合个人学习和研究使用。
 
 ChatGPT Mirror 提供账号与号池管理、对话和文件隔离，以及统一的登录界面和管理后台。
 
@@ -46,8 +46,8 @@ https://github.com/user-attachments/assets/a1cf80ff-931f-4f8f-9e71-cfe2b6616603
 解除连接时，可以选择是否一并删除上游账号，默认不勾选；直接删除上游账号时，对应连接也会同步删除。
 
 > **账号使用提醒**：共享凭据、同一账号在多地或多设备频繁切换、短时间内大量请求和异常并发，都可能触发上游安全验证。违反服务条款、绕过保护措施，或未完成要求的身份验证，也可能导致账号暂停使用或被封禁。第三种模式表示本项目当前的稳定传输方案，不代表上游不会触发风控。遇到账号异常，请以官方页面和邮件中的原因及处理流程为准。
-
-> ## 请不要使用重要账号使用自动化登录功能。尚不清楚封号状态！！！
+>
+> ## 请不要使用重要账号使用自动化登录功能。尚不清楚封号情况！！！
 
 ### 语言与深色、浅色模式
 
@@ -82,7 +82,24 @@ https://github.com/user-attachments/assets/07069457-27af-4b66-91ec-735703340abf
 ## 降智情况&各功能兼容情况
 
 <details>
-<summary><span style="color: #d4a017; font-weight: bold;">点击此处以查看降智情况及部分检测</span></summary>
+<summary><span style="color: #2dc749; font-weight: bold;">新版本降智检测</span></summary>
+
+### 当前版本使用curl-impersonate模式。以下是模型的指纹检测（仅供参考）
+
+#### 演示视频：
+
+<video controls src="https://video-for-git.elonmusk.shop/test-6-astra.mp4" title="演示视频"></video>
+
+截图
+
+![6.0-astra降智测试](./imageandvideo/6-astra降智测试.png)
+
+![6.2-sol降智测试](./imageandvideo/6.2-sol降智测试.png)
+
+</details>
+
+<details>
+<summary><span style="color: #d4a017; font-weight: bold;">点击此处以查看旧版本降智情况及部分检测</span></summary>
 
 ### 当前版本使用第三种 curl-impersonate 稳定模式，以下为老版本降智情况（原生日本 IP）
 
@@ -324,7 +341,6 @@ client_header_buffer_size 64k;
 - 修复少许 team 账号所导致的问题（由github/I0amLK提出）
 - 修复多标签页多开互踢问题（由github/asdfank提出）
 
-
 ### 2026-09
 
 - 增加大量安全性功能
@@ -352,7 +368,6 @@ client_header_buffer_size 64k;
 - 优化降智检测和必要的应对方案
 - 大幅度减少 Pro 模型的降智几率
 
-
 ### 2026-07
 
 - 完成一轮安全加固，重点收紧凭据输出、管理权限、跳转校验、敏感日志和生产环境安全配置。
@@ -366,4 +381,5 @@ client_header_buffer_size 64k;
 - 持续修复移动端对话加载和实时连接兼容问题
 
 ### 2026-05 及以前
+
 - 开发
